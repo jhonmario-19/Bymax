@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "104069136376",
+    "project_id": "bymax-asistente",
+    "storage_bucket": "bymax-asistente.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:104069136376:android:f6666ce4872e2d14d9200d",
+        "android_client_info": {
+          "package_name": "com.example.bymax"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDK_eto1sjkoapyddQi7F5z2nHkGthmnPo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
