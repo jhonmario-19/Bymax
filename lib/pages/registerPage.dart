@@ -79,7 +79,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                 ),
                 
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
                 
                 // Título de registro
                 Center(
@@ -125,7 +125,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                       ),
                       
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 10),
 
                       // Campo de email
                       Container(
@@ -145,7 +145,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                       ),
                       
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 10),
                       
                       // Campo de usuario
                       Container(
@@ -164,7 +164,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                       ),
                       
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 10),
                       
                       // Campo de contraseña
                       Container(
@@ -184,7 +184,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                       ),
                       
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 10),
                       
                       // Campo de confirmar contraseña
                       Container(
@@ -204,7 +204,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         ),
                       ),
                       
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 10),
                       
                       // Checkbox de términos y condiciones
                       Row(
@@ -234,7 +234,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         ],
                       ),
                       
-                      const SizedBox(height: 25),
+                      const SizedBox(height: 20),
                       
                       // Botón de registro
                       ElevatedButton(

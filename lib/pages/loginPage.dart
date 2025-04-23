@@ -1,3 +1,4 @@
+import 'package:bymax/pages/homePage.dart';
 import 'package:flutter/material.dart';
 import 'package:bymax/pages/registerPage.dart';
 
@@ -71,7 +72,7 @@ class _LoginPageState extends State<LoginPage> {
                 margin: const EdgeInsets.all(16.0),
                 padding: const EdgeInsets.all(20.0),
                 decoration: BoxDecoration(
-                  color: Color(0xFF00C853), // Verde más brillante como en la imagen
+                  color: Color(0xFF03d069), // Verde más brillante como en la imagen
                   borderRadius: BorderRadius.circular(15),
                 ),
                 child: Column(
@@ -160,7 +161,12 @@ class _LoginPageState extends State<LoginPage> {
                     
                     // Botón de iniciar sesión
                     ElevatedButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => homePage()),
+                        );
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: Color(0xFF00C853),
