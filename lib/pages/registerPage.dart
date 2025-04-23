@@ -44,7 +44,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: IconButton(
-                    icon: Icon(Icons.arrow_back, color: Colors.black54, size: 30),
+                    icon: Icon(Icons.arrow_back, color: Colors.white, size: 30),
                     onPressed: () {
                       Navigator.of(context).pop();
                     },

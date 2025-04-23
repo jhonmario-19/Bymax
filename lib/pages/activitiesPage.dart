@@ -1,31 +1,33 @@
 import 'package:flutter/material.dart';
 
-class RecordatoryPage extends StatefulWidget {
-  const RecordatoryPage({super.key});
+class ActivitiesPage extends StatefulWidget {
+  const ActivitiesPage({super.key});
 
   @override
-  State<RecordatoryPage> createState() => _RecordatoryPageState();
+  State<ActivitiesPage> createState() => _ActivitiesPageState();
 }
 
-class _RecordatoryPageState extends State<RecordatoryPage> {
+class _ActivitiesPageState extends State<ActivitiesPage> {
+  // Índice para controlar qué botón está seleccionado
+  int _selectedIndex = 2; // Por defecto seleccionamos Actividades (índice 2)
 
-  int _selectedIndex = 2;
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Movemos la barra de navegación al bottomNavigationBar del Scaffold
+      // Agregamos la barra de navegación como propiedad bottomNavigationBar del Scaffold
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: Color(0xFF03d069),
+          color: const Color(0xFF03d069),
+          
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             _buildNavBarItem(Icons.home, 0),
-            _buildNavBarItem(Icons.add,1),
-            _buildNavBarItem(Icons.settings,2),
-            _buildNavBarItem(Icons.logout,3),
+            _buildNavBarItem(Icons.add, 1),
+            _buildNavBarItem(Icons.settings, 2),
+            _buildNavBarItem(Icons.logout, 3),
           ],
         ),
       ),
@@ -34,15 +36,14 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
         color: const Color(0xFF03d069), // Color verde de fondo
         child: Column(
           children: [
-            // Header verde con saludo
+            // Header verde con saludo y botón de regreso
             Container(
               padding: const EdgeInsets.only(top: 30, left: 16, right: 16, bottom: 8),
               color: const Color(0xFF03d069),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 16),
-
+                  // Botón de regreso
                   IconButton(
                     icon: const Icon(Icons.arrow_back, color: Colors.white, size: 30),
                     onPressed: () {
@@ -51,16 +52,15 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
                     padding: EdgeInsets.zero,
                     alignment: Alignment.centerLeft,
                   ),
-
+                  
                   // Logo Bymax
                   Row(
                     children: [
                       Container(
                         width: 50,
                         height: 50,
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           image: DecorationImage(
-                            // Corregir la ruta de la imagen - quitar la barra inicial
                             image: AssetImage('lib/pages/images/logo.png'),
                             fit: BoxFit.cover,
                           ),
@@ -127,33 +127,56 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                 child: Column(
                   children: [
-                    // Recordatorio 1: Medicamento
-                    _buildReminderItem(
-                      icon: Icons.medication_outlined,
-                      title: 'Medicamento',
-                      date: '2 de marzo 2025',
+                    // Título de la sección
+                    const Text(
+                      'Actividades',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Actividad 1: Caminar
+                    _buildActivityItem(
+                      icon: Icons.directions_walk,
+                      title: 'Caminar',
+                      duration: '30 minutos',
+                      time: '8:00 AM',
                     ),
                     const SizedBox(height: 12),
                     
-                    // Recordatorio 2: Cita médica
-                    _buildReminderItem(
-                      icon: Icons.calendar_month_outlined,
-                      title: 'cita medica',
-                      date: '2 de marzo 2025',
+                    // Actividad 2: Ejercicios
+                    _buildActivityItem(
+                      icon: Icons.fitness_center,
+                      title: 'Ejercicios',
+                      duration: '45 minutos',
+                      time: '10:30 AM',
                     ),
                     const SizedBox(height: 12),
                     
-                    // Recordatorio 3: Terapia
-                    _buildReminderItem(
-                      icon: Icons.fitness_center_outlined,
-                      title: 'Terapia',
-                      date: '3 de marzo 2025',
+                    // Actividad 3: Meditación
+                    _buildActivityItem(
+                      icon: Icons.self_improvement,
+                      title: 'Meditación',
+                      duration: '15 minutos',
+                      time: '6:00 PM',
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Actividad 4: Lectura
+                    _buildActivityItem(
+                      icon: Icons.menu_book,
+                      title: 'Lectura',
+                      duration: '20 minutos',
+                      time: '9:00 PM',
                     ),
                     
                     // Espaciador
                     Expanded(child: Container()),
                     
-                    // Botón "AGREGAR RECORDATORIO"
+                    // Botón "AGREGAR ACTIVIDAD"
                     Container(
                       width: 240,
                       height: 45,
@@ -168,7 +191,7 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
                           ),
                         ),
                         child: const Text(
-                          'AGREGAR RECORDATORIO',
+                          'AGREGAR ACTIVIDAD',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
@@ -188,26 +211,27 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
     );
   }
 
-  // Widget para cada elemento de recordatorio
-  Widget _buildReminderItem({
+  // Widget para cada elemento de actividad
+  Widget _buildActivityItem({
     required IconData icon,
     required String title,
-    required String date,
+    required String duration,
+    required String time,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.grey[200],
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          // Icono en cuadrado negro
+          // Icono en cuadrado púrpura (color similar al de la imagen de actividades)
           Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.black87,
+              color: const Color(0xFFAA33CC), // Color púrpura
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -217,7 +241,7 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
             ),
           ),
           const SizedBox(width: 12),
-          // Título y fecha
+          // Título y detalles de la actividad
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,20 +253,44 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                Text(
-                  date,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time,
+                      size: 12,
+                      color: Colors.grey[600],
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      duration,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.schedule,
+                      size: 12,
+                      color: Colors.grey[600],
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      time,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          // Icono de notificación
+          // Icono de completado
           Icon(
-            Icons.notifications,
-            color: Colors.black,
+            Icons.check_circle_outline,
+            color: Colors.grey[600],
             size: 24,
           ),
         ],
@@ -250,7 +298,7 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
     );
   }
 
-  // Widget para cada icono de la barra de navegación
+  // Widget actualizado para la barra de navegación con selección
   Widget _buildNavBarItem(IconData icon, int index) {
   final bool isSelected = _selectedIndex == index;
 

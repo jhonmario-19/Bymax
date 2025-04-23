@@ -1,12 +1,35 @@
+import 'package:bymax/pages/activitiesPage.dart';
 import 'package:bymax/pages/recordatoryPage.dart';
 import 'package:flutter/material.dart';
 
-class homePage extends StatelessWidget {
+class homePage extends StatefulWidget {
   const homePage({super.key});
 
   @override
+  State<homePage> createState() => _homePageState();
+}
+
+class _homePageState extends State<homePage> {
+  int _selectedIndex = 2;
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: Color(0xFF03d069),
+          //borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildNavBarItem(Icons.home, 0),
+            _buildNavBarItem(Icons.add, 1),
+            _buildNavBarItem(Icons.settings, 2),
+            _buildNavBarItem(Icons.logout, 3),
+          ],
+        ),
+      ),
       body: Container(
         width: double.infinity,
         color: const Color(0xFF03d069),
@@ -14,27 +37,45 @@ class homePage extends StatelessWidget {
           children: [
             // Barra de estado personalizada + Encabezado verde
             Container(
-              padding: const EdgeInsets.only(top: 30, left: 16, right: 16, bottom: 8),
+              padding: const EdgeInsets.only(
+                top: 30,
+                left: 16,
+                right: 16,
+                bottom: 8,
+              ),
               color: const Color(0xFF03d069),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
 
                 children: [
-                  const SizedBox(height: 25),
+                  const SizedBox(height: 10),
+
+                  IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    padding: EdgeInsets.zero,
+                    alignment: Alignment.centerLeft,
+                  ),
                   // Logo Bymax
                   Row(
                     children: [
                       Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        image: DecorationImage(
-                          // Corregir la ruta de la imagen - quitar la barra inicial
-                          image: AssetImage('lib/pages/images/logo.png'),
-                          fit: BoxFit.cover,
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          image: DecorationImage(
+                            // Corregir la ruta de la imagen - quitar la barra inicial
+                            image: AssetImage('lib/pages/images/logo.png'),
+                            fit: BoxFit.cover,
+                          ),
                         ),
-                      )
-                    ),
+                      ),
                       const SizedBox(width: 8),
                       const Text(
                         'Bymax',
@@ -45,12 +86,11 @@ class homePage extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      
                     ],
                   ),
-                  
+
                   // Saludo con texto blanco subrayado
-                  const SizedBox(height: 25),
+                  const SizedBox(height: 15),
                   Row(
                     children: [
                       CircleAvatar(
@@ -60,7 +100,9 @@ class homePage extends StatelessWidget {
                       ),
                       const SizedBox(width: 10), // Espacio entre avatar y texto
                       Column(
-                        crossAxisAlignment: CrossAxisAlignment.start, // Alinea los textos a la izquierda
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start, // Alinea los textos a la izquierda
                         children: [
                           const Text(
                             'Hola Usuario',
@@ -72,10 +114,7 @@ class homePage extends StatelessWidget {
                           ),
                           const Text(
                             'Hoy es un día maravilloso',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                            ),
+                            style: TextStyle(color: Colors.white, fontSize: 14),
                           ),
                         ],
                       ),
@@ -84,26 +123,34 @@ class homePage extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Menú de opciones con fondo blanco
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
-                  bottom: Radius.zero, // Sin bordes redondeados abajo
-                ),// Bordes redondeados
+                    top: Radius.circular(20),
+                    bottom: Radius.zero, // Sin bordes redondeados abajo
+                  ), // Bordes redondeados
                   image: const DecorationImage(
                     image: AssetImage('lib/pages/images/patron_homePage.jpg'),
                     fit: BoxFit.cover,
                     colorFilter: ColorFilter.mode(
-                      Color.fromARGB(211, 200, 193, 193), // Opacidad (ajustable)
+                      Color.fromARGB(
+                        211,
+                        200,
+                        193,
+                        193,
+                      ), // Opacidad (ajustable)
                       BlendMode.darken, // Modo de mezcla
                     ),
                   ),
                 ),
 
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 20,
+                ),
                 child: Column(
                   children: [
                     // Asistente IA - botón vertical
@@ -112,10 +159,9 @@ class homePage extends StatelessWidget {
                       label: 'Asistente IA',
                       color: Colors.blue,
                       textColor: Colors.black,
-                      
                     ),
-                    const SizedBox(height: 20),
-                    
+                    const SizedBox(height: 15),
+
                     // Recordatorios - botón vertical
                     _buildMenuItemVertical(
                       icon: Icons.notifications_active,
@@ -125,43 +171,35 @@ class homePage extends StatelessWidget {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => RecordatoryPage()),
+                          MaterialPageRoute(
+                            builder: (context) => RecordatoryPage(),
+                          ),
                         );
                       },
                     ),
 
-                    const SizedBox(height: 20),
-                    
+                    const SizedBox(height: 15),
+
                     // Actividades - botón vertical
                     _buildMenuItemVertical(
                       icon: Icons.access_time_filled,
                       label: 'Actividades',
                       color: Colors.purple,
                       textColor: Colors.black,
-                      
-                      
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ActivitiesPage(),
+                          ),
+                        );
+                      },
                     ),
-                    
+
                     // Espacio para el resto del contenido
                     Expanded(child: Container()),
-                    
-                    //Barra de navegación inferior simplificada
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _buildNavBarItem(Icons.home, isSelected: true),
-                          _buildNavBarItem(Icons.chat_bubble_outline),
-                          _buildNavBarItem(Icons.settings),
-                          _buildNavBarItem(Icons.menu),
-                        ],
-                      ),
-                    ),
+
+                    // Removido la barra de navegación de aquí ya que ahora está en bottomNavigationBar
                   ],
                 ),
               ),
@@ -174,58 +212,81 @@ class homePage extends StatelessWidget {
 
   // Nuevo método para crear botones verticales con texto debajo
   Widget _buildMenuItemVertical({
-  required IconData icon,
-  required String label,
-  required Color color,
-  required Color textColor,
-  VoidCallback? onTap, // ← nuevo parámetro
-}) {
-  return GestureDetector(
-    onTap: onTap, // ← ejecuta la función al tocar
-    child: Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(16),
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Color textColor,
+    VoidCallback? onTap, // ← nuevo parámetro
+  }) {
+    return GestureDetector(
+      onTap: onTap, // ← ejecuta la función al tocar
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: Colors.white, size: 60),
             ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 60,
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 25,
+                fontWeight: FontWeight.w500,
+                color: textColor,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 25,
-              fontWeight: FontWeight.w500,
-              color: textColor,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
+  Widget _buildNavBarItem(IconData icon, int index) {
+    final bool isSelected = _selectedIndex == index;
 
-  Widget _buildNavBarItem(IconData icon, {bool isSelected = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.green.withOpacity(0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(
-        icon,
-        color: isSelected ? const Color(0xFF00A86B) : Colors.grey,
-        size: 24,
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedIndex = index;
+        });
+
+        // Evitamos navegación si ya estamos en la pantalla actual
+        if (_selectedIndex == index) {
+          switch (index) {
+            case 0:
+              Navigator.pushReplacementNamed(context, '');
+              break;
+            case 1:
+              Navigator.pushReplacementNamed(context, '/addUser');
+              break;
+            case 2:
+              Navigator.pushReplacementNamed(context, '/settings');
+              break;
+            case 3:
+              Navigator.pushReplacementNamed(context, '/loginPage');
+              break;
+          }
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color:
+              isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
+          size: 24,
+        ),
       ),
     );
   }
