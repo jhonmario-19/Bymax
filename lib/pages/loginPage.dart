@@ -1,6 +1,7 @@
-import 'package:bymax/pages/homePage.dart';
+import 'package:bymax/controllers/authController.dart';
 import 'package:flutter/material.dart';
 import 'package:bymax/pages/registerPage.dart';
+
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -10,16 +11,72 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _userController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _rememberMe = true;
+  bool _isLoading = false;
 
   @override
   void dispose() {
-    _userController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
+
+    Future<void> _handleLogin() async {
+      if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Por favor, completa todos los campos'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _isLoading = true;
+      });
+
+      try {
+        final result = await AuthController.signIn(
+          _emailController.text.trim(),
+          _passwordController.text.trim(),
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          _isLoading = false;
+        });
+
+        if (result['success'] == true) {
+          if (_rememberMe) {
+            // Implementar lógica para recordar usuario
+          }
+          Navigator.pushReplacementNamed(context, '/homePage');
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Error al iniciar sesión'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error inesperado: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
 
   @override
   Widget build(BuildContext context) {
@@ -27,67 +84,71 @@ class _LoginPageState extends State<LoginPage> {
       body: Container(
         decoration: const BoxDecoration(
           image: DecorationImage(
-            // Corregir la ruta de la imagen - quitar la barra inicial
             image: AssetImage('lib/pages/images/backGround.jpg'),
             fit: BoxFit.cover,
           ),
         ),
         child: SafeArea(
-          child: Column(
-            // crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Logo y nombre
-              Padding(
-                padding: const EdgeInsets.only(left: 16.0, top: 40.0, ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        image: DecorationImage(
-                          // Corregir la ruta de la imagen - quitar la barra inicial
-                          image: AssetImage('lib/pages/images/logo.png'),
-                          fit: BoxFit.cover,
-                        ),
-                      )
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Bymax',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 35,
-                        fontWeight: FontWeight.bold,
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.of(context).size.height - 
+                        MediaQuery.of(context).padding.top - 
+                        MediaQuery.of(context).padding.bottom,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Logo y nombre
+                Padding(
+                  padding: const EdgeInsets.only(left: 16.0, top: 40.0),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: const BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage('lib/pages/images/logo.png'),
+                            fit: BoxFit.cover,
+                          ),
+                        )
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Bymax',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 35,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              
-              const Spacer(),
-              
-              // Contenedor verde para el formulario de login
-              Container(
-                margin: const EdgeInsets.all(16.0),
-                padding: const EdgeInsets.all(20.0),
-                decoration: BoxDecoration(
-                  color: Color(0xFF03d069), // Verde más brillante como en la imagen
-                  borderRadius: BorderRadius.circular(15),
-                ),
+
+                // Contenedor verde para el formulario de login
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+                  padding: const EdgeInsets.all(20.0),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF03d069),
+                    borderRadius: BorderRadius.circular(15),
+                  ),
                 child: Column(
                   children: [
-                    // Campo de usuario
+                    // Campo de email
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(25),
                       ),
                       child: TextField(
-                        controller: _userController,
-                        decoration: InputDecoration(
-                          hintText: 'Usuario',
-                          prefixIcon: Icon(Icons.person_outline),
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(
+                          hintText: 'Correo electrónico',
+                          prefixIcon: Icon(Icons.email_outlined),
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.symmetric(vertical: 15),
                         ),
@@ -105,7 +166,7 @@ class _LoginPageState extends State<LoginPage> {
                       child: TextField(
                         controller: _passwordController,
                         obscureText: true,
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           hintText: 'Contraseña',
                           prefixIcon: Icon(Icons.lock_outline),
                           border: InputBorder.none,
@@ -119,7 +180,6 @@ class _LoginPageState extends State<LoginPage> {
                     // Opciones adicionales
                     Row(
                       children: [
-                        // Checkbox de recordarme
                         SizedBox(
                           width: 24,
                           height: 24,
@@ -130,14 +190,13 @@ class _LoginPageState extends State<LoginPage> {
                                 _rememberMe = value ?? true;
                               });
                             },
-                            // Corregir MaterialStateProperty en lugar de WidgetStateProperty
                             fillColor: MaterialStateProperty.all(Colors.white),
-                            checkColor: Color(0xFF00C853),
-                            shape: CircleBorder(),
+                            checkColor: const Color(0xFF00C853),
+                            shape: const CircleBorder(),
                           ),
                         ),
                         const SizedBox(width: 5),
-                        Text(
+                        const Text(
                           'Recordarme',
                           style: TextStyle(color: Colors.white, fontSize: 12),
                         ),
@@ -146,10 +205,10 @@ class _LoginPageState extends State<LoginPage> {
                           onPressed: () {},
                           style: TextButton.styleFrom(
                             padding: EdgeInsets.zero,
-                            minimumSize: Size(0, 0),
+                            minimumSize: const Size(0, 0),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: Text(
+                          child: const Text(
                             '¿Olvidaste tu contraseña?',
                             style: TextStyle(color: Colors.white, fontSize: 12),
                           ),
@@ -161,27 +220,31 @@ class _LoginPageState extends State<LoginPage> {
                     
                     // Botón de iniciar sesión
                     ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => homePage()),
-                        );
-                      },
+                      onPressed: _isLoading ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
-                        foregroundColor: Color(0xFF00C853),
+                        foregroundColor: const Color(0xFF00C853),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(25),
                         ),
-                        minimumSize: Size(double.infinity, 45),
+                        minimumSize: const Size(double.infinity, 45),
                       ),
-                      child: Text(
-                        'INICIAR SESIÓN',
-                        style: TextStyle(
-                          color: Color(0xFF00C853),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00C853)),
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'INICIAR SESIÓN',
+                              style: TextStyle(
+                                color: Color(0xFF00C853),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                     
                     const SizedBox(height: 20),
@@ -190,7 +253,7 @@ class _LoginPageState extends State<LoginPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
+                        const Text(
                           '¿No tienes una cuenta?',
                           style: TextStyle(color: Colors.white, fontSize: 12),
                         ),
@@ -198,15 +261,15 @@ class _LoginPageState extends State<LoginPage> {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => RegisterPage()),
+                              MaterialPageRoute(builder: (context) => const RegisterPage()),
                             );
                           },
                           style: TextButton.styleFrom(
                             padding: EdgeInsets.zero,
-                            minimumSize: Size(0, 0),
+                            minimumSize: const Size(0, 0),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: Text(
+                          child: const Text(
                             'Crea una',
                             style: TextStyle(
                               color: Colors.white,
@@ -223,6 +286,8 @@ class _LoginPageState extends State<LoginPage> {
               
               const SizedBox(height: 20),
             ],
+          ),
+          ),
           ),
         ),
       ),

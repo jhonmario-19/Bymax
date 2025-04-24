@@ -1,3 +1,4 @@
+import 'package:bymax/controllers/authController.dart';
 import 'package:bymax/pages/activitiesPage.dart';
 import 'package:bymax/pages/recordatoryPage.dart';
 import 'package:flutter/material.dart';
@@ -56,8 +57,52 @@ class _homePageState extends State<homePage> {
                       color: Colors.white,
                       size: 30,
                     ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
+                    onPressed: () async {
+                      // Mostrar diálogo de confirmación
+                      final shouldExit = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('¿Estás seguro?'),
+                          content: const Text('¿Deseas cerrar sesión y salir de la aplicación?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(false),
+                              child: const Text(
+                                'Cancelar',
+                                style: TextStyle(color: Color(0xFF03d069)),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(true),
+                              child: const Text(
+                                'Salir',
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
+                          ],
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                      );
+
+                      // Si el usuario confirma, cerrar sesión y regresar al login
+                      if (shouldExit == true) {
+                        try {
+                          await AuthController.signOut();
+                          if (!mounted) return;
+                          
+                          Navigator.pushReplacementNamed(context, '/loginPage');
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error al cerrar sesión: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
                     },
                     padding: EdgeInsets.zero,
                     alignment: Alignment.centerLeft,
@@ -252,12 +297,11 @@ class _homePageState extends State<homePage> {
     final bool isSelected = _selectedIndex == index;
 
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         setState(() {
           _selectedIndex = index;
         });
 
-        // Evitamos navegación si ya estamos en la pantalla actual
         if (_selectedIndex == index) {
           switch (index) {
             case 0:
@@ -270,7 +314,28 @@ class _homePageState extends State<homePage> {
               Navigator.pushReplacementNamed(context, '/settings');
               break;
             case 3:
-              Navigator.pushReplacementNamed(context, '/loginPage');
+              try {
+                await AuthController.signOut();
+                if (!mounted) return;
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Sesión cerrada correctamente'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                
+                Navigator.pushReplacementNamed(context, '/loginPage');
+              } catch (e) {
+                if (!mounted) return;
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error al cerrar sesión: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
               break;
           }
         }
@@ -278,8 +343,7 @@ class _homePageState extends State<homePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color:
-              isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(
