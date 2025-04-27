@@ -12,15 +12,22 @@ class homePage extends StatefulWidget {
 
 class _homePageState extends State<homePage> {
   int _selectedIndex = 2;
+  // Controlador para el scrollbar
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    // Importante liberar el controlador cuando se destruye el widget
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: Color(0xFF03d069),
-          //borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(color: Color(0xFF03d069)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
@@ -47,7 +54,6 @@ class _homePageState extends State<homePage> {
               color: const Color(0xFF03d069),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-
                 children: [
                   const SizedBox(height: 10),
 
@@ -61,29 +67,34 @@ class _homePageState extends State<homePage> {
                       // Mostrar diálogo de confirmación
                       final shouldExit = await showDialog<bool>(
                         context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('¿Estás seguro?'),
-                          content: const Text('¿Deseas cerrar sesión y salir de la aplicación?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(false),
-                              child: const Text(
-                                'Cancelar',
-                                style: TextStyle(color: Color(0xFF03d069)),
+                        builder:
+                            (context) => AlertDialog(
+                              title: const Text('¿Estás seguro?'),
+                              content: const Text(
+                                '¿Deseas cerrar sesión y salir de la aplicación?',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed:
+                                      () => Navigator.of(context).pop(false),
+                                  child: const Text(
+                                    'Cancelar',
+                                    style: TextStyle(color: Color(0xFF03d069)),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed:
+                                      () => Navigator.of(context).pop(true),
+                                  child: const Text(
+                                    'Salir',
+                                    style: TextStyle(color: Colors.red),
+                                  ),
+                                ),
+                              ],
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
                               ),
                             ),
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(true),
-                              child: const Text(
-                                'Salir',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ),
-                          ],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                        ),
                       );
 
                       // Si el usuario confirma, cerrar sesión y regresar al login
@@ -91,7 +102,7 @@ class _homePageState extends State<homePage> {
                         try {
                           await AuthController.signOut();
                           if (!mounted) return;
-                          
+
                           Navigator.pushReplacementNamed(context, '/loginPage');
                         } catch (e) {
                           if (!mounted) return;
@@ -115,7 +126,6 @@ class _homePageState extends State<homePage> {
                         height: 50,
                         decoration: BoxDecoration(
                           image: DecorationImage(
-                            // Corregir la ruta de la imagen - quitar la barra inicial
                             image: AssetImage('lib/pages/images/logo.png'),
                             fit: BoxFit.cover,
                           ),
@@ -145,9 +155,7 @@ class _homePageState extends State<homePage> {
                       ),
                       const SizedBox(width: 10), // Espacio entre avatar y texto
                       Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start, // Alinea los textos a la izquierda
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
                             'Hola Usuario',
@@ -176,76 +184,101 @@ class _homePageState extends State<homePage> {
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(20),
                     bottom: Radius.zero, // Sin bordes redondeados abajo
-                  ), // Bordes redondeados
+                  ),
                   image: const DecorationImage(
                     image: AssetImage('lib/pages/images/patron_homePage.jpg'),
                     fit: BoxFit.cover,
                     colorFilter: ColorFilter.mode(
-                      Color.fromARGB(
-                        211,
-                        200,
-                        193,
-                        193,
-                      ), // Opacidad (ajustable)
+                      Color.fromARGB(211, 200, 193, 193),
                       BlendMode.darken, // Modo de mezcla
                     ),
                   ),
                 ),
-
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 20,
-                ),
-                child: Column(
-                  children: [
-                    // Asistente IA - botón vertical
-                    _buildMenuItemVertical(
-                      icon: Icons.mic,
-                      label: 'Asistente IA',
-                      color: Colors.blue,
-                      textColor: Colors.black,
+                // Aquí viene la implementación del Scrollbar
+                child: Scrollbar(
+                  controller: _scrollController,
+                  thumbVisibility:
+                      true, // Hace que el scrollbar sea siempre visible
+                  thickness: 6, // Grosor del scrollbar
+                  radius: Radius.circular(
+                    10,
+                  ), // Bordes redondeados del scrollbar
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 20,
                     ),
-                    const SizedBox(height: 15),
+                    child: Column(
+                      children: [
+                        // Asistente IA - botón vertical
+                        _buildMenuItemVertical(
+                          icon: Icons.mic,
+                          label: 'Asistente IA',
+                          color: Colors.blue,
+                          textColor: Colors.black,
+                        ),
+                        const SizedBox(height: 15),
 
-                    // Recordatorios - botón vertical
-                    _buildMenuItemVertical(
-                      icon: Icons.notifications_active,
-                      label: 'Recordatorios',
-                      color: Colors.amber,
-                      textColor: Colors.black,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => RecordatoryPage(),
-                          ),
-                        );
-                      },
+                        // Recordatorios - botón vertical
+                        _buildMenuItemVertical(
+                          icon: Icons.notifications_active,
+                          label: 'Recordatorios',
+                          color: Colors.amber,
+                          textColor: Colors.black,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => RecordatoryPage(),
+                              ),
+                            );
+                          },
+                        ),
+
+                        const SizedBox(height: 15),
+
+                        // Actividades - botón vertical
+                        _buildMenuItemVertical(
+                          icon: Icons.access_time_filled,
+                          label: 'Actividades',
+                          color: Colors.purple,
+                          textColor: Colors.black,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ActivitiesPage(),
+                              ),
+                            );
+                          },
+                        ),
+
+                        // Puedes añadir más elementos aquí para probar el scroll
+                        const SizedBox(height: 15),
+
+                        // Opcional: Añadir más elementos para probar el scrollbar
+                        _buildMenuItemVertical(
+                          icon: Icons.people,
+                          label: 'Usuarios',
+                          color: Colors.green,
+                          textColor: Colors.black,
+                        ),
+
+                        const SizedBox(height: 15),
+
+                        _buildMenuItemVertical(
+                          icon: Icons.settings,
+                          label: 'Configuración',
+                          color: Colors.orange,
+                          textColor: Colors.black,
+                        ),
+
+                        // Añadir espacio al final para mejor experiencia de desplazamiento
+                        const SizedBox(height: 20),
+                      ],
                     ),
-
-                    const SizedBox(height: 15),
-
-                    // Actividades - botón vertical
-                    _buildMenuItemVertical(
-                      icon: Icons.access_time_filled,
-                      label: 'Actividades',
-                      color: Colors.purple,
-                      textColor: Colors.black,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ActivitiesPage(),
-                          ),
-                        );
-                      },
-                    ),
-
-                    // Espacio para el resto del contenido
-                    Expanded(child: Container()),
-
-                    // Removido la barra de navegación de aquí ya que ahora está en bottomNavigationBar
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -261,10 +294,10 @@ class _homePageState extends State<homePage> {
     required String label,
     required Color color,
     required Color textColor,
-    VoidCallback? onTap, // ← nuevo parámetro
+    VoidCallback? onTap,
   }) {
     return GestureDetector(
-      onTap: onTap, // ← ejecuta la función al tocar
+      onTap: onTap,
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -317,18 +350,18 @@ class _homePageState extends State<homePage> {
               try {
                 await AuthController.signOut();
                 if (!mounted) return;
-                
+
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Sesión cerrada correctamente'),
                     backgroundColor: Colors.green,
                   ),
                 );
-                
+
                 Navigator.pushReplacementNamed(context, '/loginPage');
               } catch (e) {
                 if (!mounted) return;
-                
+
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Error al cerrar sesión: $e'),
@@ -343,7 +376,8 @@ class _homePageState extends State<homePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          color:
+              isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(

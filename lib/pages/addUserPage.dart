@@ -8,19 +8,24 @@ class AddUserPage extends StatefulWidget {
 }
 
 class _AddUserPageState extends State<AddUserPage> {
-  int _selectedIndex = 1; // Por defecto seleccionamos la opción de agregar (índice 1)
-  
+  int _selectedIndex =
+      1; // Por defecto seleccionamos la opción de agregar (índice 1)
+
   // Controladores para los campos de texto
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
-  
+
+  // Añadimos el controlador para el scrollbar
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void dispose() {
     // Limpiamos los controladores cuando se destruye el widget
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _scrollController.dispose(); // Importante liberar el controlador del scroll
     super.dispose();
   }
 
@@ -30,10 +35,7 @@ class _AddUserPageState extends State<AddUserPage> {
       // Barra de navegación inferior fuera del SafeArea
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFF03d069),
-          
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF03d069)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
@@ -51,7 +53,12 @@ class _AddUserPageState extends State<AddUserPage> {
           children: [
             // Header verde con saludo
             Container(
-              padding: const EdgeInsets.only(top: 30, left: 16, right: 16, bottom: 8),
+              padding: const EdgeInsets.only(
+                top: 30,
+                left: 16,
+                right: 16,
+                bottom: 8,
+              ),
               color: const Color(0xFF03d069),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -59,7 +66,11 @@ class _AddUserPageState extends State<AddUserPage> {
                   const SizedBox(height: 16),
 
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white, size: 30),
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      color: Colors.white,
+                      size: 30,
+                    ),
                     onPressed: () {
                       Navigator.of(context).pop();
                     },
@@ -78,7 +89,7 @@ class _AddUserPageState extends State<AddUserPage> {
                             image: AssetImage('lib/pages/images/logo.png'),
                             fit: BoxFit.cover,
                           ),
-                        )
+                        ),
                       ),
                       const SizedBox(width: 8),
                       const Text(
@@ -91,7 +102,7 @@ class _AddUserPageState extends State<AddUserPage> {
                       ),
                     ],
                   ),
-                  
+
                   // Saludo con texto blanco
                   const SizedBox(height: 8),
                   Row(
@@ -115,10 +126,7 @@ class _AddUserPageState extends State<AddUserPage> {
                           ),
                           const Text(
                             'Hoy es un día maravilloso',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
+                            style: TextStyle(color: Colors.white, fontSize: 12),
                           ),
                         ],
                       ),
@@ -127,7 +135,7 @@ class _AddUserPageState extends State<AddUserPage> {
                 ],
               ),
             ),
-            
+
             // Contenido principal con fondo blanco
             Expanded(
               child: Container(
@@ -138,109 +146,150 @@ class _AddUserPageState extends State<AddUserPage> {
                     bottom: Radius.zero,
                   ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Título de la sección
-                    const Center(
-                      child: Text(
-                        'Agregar Usuario',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
-                      ),
+                // Implementamos el Scrollbar aquí
+                child: Scrollbar(
+                  controller: _scrollController,
+                  thumbVisibility:
+                      true, // Hace que la barra sea siempre visible
+                  thickness: 6, // Grosor del scrollbar
+                  radius: Radius.circular(
+                    10,
+                  ), // Bordes redondeados para el scrollbar
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 20,
                     ),
-                    const SizedBox(height: 24),
-                    
-                    // Formulario para agregar usuario
-                    _buildTextField(
-                      controller: _nameController,
-                      label: 'Nombre completo',
-                      icon: Icons.person,
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    _buildTextField(
-                      controller: _emailController,
-                      label: 'Correo electrónico',
-                      icon: Icons.email,
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    _buildTextField(
-                      controller: _phoneController,
-                      label: 'Teléfono',
-                      icon: Icons.phone,
-                      keyboardType: TextInputType.phone,
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Selector de tipo de usuario
-                    const Text(
-                      'Tipo de usuario',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    
-                    // Opciones de tipo de usuario
-                    Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildUserTypeOption(
-                          icon: Icons.person,
-                          label: 'Paciente',
-                          isSelected: true,
+                        // Título de la sección
+                        const Center(
+                          child: Text(
+                            'Agregar Usuario',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
                         ),
-                        
-                        const SizedBox(width: 12),
-                        _buildUserTypeOption(
-                          icon: Icons.family_restroom,
-                          label: 'Familiar',
-                          isSelected: false,
+                        const SizedBox(height: 24),
+
+                        // Formulario para agregar usuario
+                        _buildTextField(
+                          controller: _nameController,
+                          label: 'Nombre completo',
+                          icon: Icons.person,
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: _emailController,
+                          label: 'Correo electrónico',
+                          icon: Icons.email,
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: _phoneController,
+                          label: 'Teléfono',
+                          icon: Icons.phone,
+                          keyboardType: TextInputType.phone,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Selector de tipo de usuario
+                        const Text(
+                          'Tipo de usuario',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Opciones de tipo de usuario
+                        Row(
+                          children: [
+                            _buildUserTypeOption(
+                              icon: Icons.person,
+                              label: 'Paciente',
+                              isSelected: true,
+                            ),
+
+                            const SizedBox(width: 12),
+                            _buildUserTypeOption(
+                              icon: Icons.family_restroom,
+                              label: 'Familiar',
+                              isSelected: false,
+                            ),
+                          ],
+                        ),
+
+                        // Agregamos más campos para probar el scrollbar
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: TextEditingController(),
+                          label: 'Dirección',
+                          icon: Icons.home,
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: TextEditingController(),
+                          label: 'Fecha de nacimiento',
+                          icon: Icons.calendar_today,
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: TextEditingController(),
+                          label: 'Número de identificación',
+                          icon: Icons.badge,
+                        ),
+
+                        // Espacio para asegurar que el botón no se corte
+                        const SizedBox(height: 40),
+
+                        // Botón "GUARDAR USUARIO"
+                        Center(
+                          child: Container(
+                            width: 240,
+                            height: 45,
+                            margin: const EdgeInsets.only(bottom: 20),
+                            child: ElevatedButton(
+                              onPressed: () {
+                                // Aquí iría la lógica para guardar el usuario
+                                // Por ejemplo, mostrar un diálogo de confirmación
+                                _showSuccessDialog(context);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF03d069),
+                                foregroundColor: Colors.black,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(25),
+                                ),
+                              ),
+                              child: const Text(
+                                'GUARDAR USUARIO',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    
-                    // Espaciador
-                    Expanded(child: Container()),
-                    
-                    // Botón "GUARDAR USUARIO"
-                    Center(
-                      child: Container(
-                        width: 240,
-                        height: 45,
-                        margin: const EdgeInsets.only(bottom: 20),
-                        child: ElevatedButton(
-                          onPressed: () {
-                            // Aquí iría la lógica para guardar el usuario
-                            // Por ejemplo, mostrar un diálogo de confirmación
-                            _showSuccessDialog(context);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF03d069),
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(25),
-                            ),
-                          ),
-                          child: const Text(
-                            'GUARDAR USUARIO',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -270,9 +319,7 @@ class _AddUserPageState extends State<AddUserPage> {
           border: InputBorder.none,
           labelText: label,
           prefixIcon: Icon(icon, color: const Color(0xFF03d069)),
-          labelStyle: TextStyle(
-            color: Colors.grey[600],
-          ),
+          labelStyle: TextStyle(color: Colors.grey[600]),
         ),
       ),
     );
@@ -292,11 +339,15 @@ class _AddUserPageState extends State<AddUserPage> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF03d069).withOpacity(0.2) : Colors.grey[200],
+            color:
+                isSelected
+                    ? const Color(0xFF03d069).withOpacity(0.2)
+                    : Colors.grey[200],
             borderRadius: BorderRadius.circular(8),
-            border: isSelected
-                ? Border.all(color: const Color(0xFF03d069), width: 2)
-                : null,
+            border:
+                isSelected
+                    ? Border.all(color: const Color(0xFF03d069), width: 2)
+                    : null,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -311,7 +362,8 @@ class _AddUserPageState extends State<AddUserPage> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? const Color(0xFF03d069) : Colors.grey[600],
+                  color:
+                      isSelected ? const Color(0xFF03d069) : Colors.grey[600],
                 ),
               ),
             ],
@@ -323,48 +375,48 @@ class _AddUserPageState extends State<AddUserPage> {
 
   // Widget para cada icono de la barra de navegación
   Widget _buildNavBarItem(IconData icon, int index) {
-  final bool isSelected = _selectedIndex == index;
+    final bool isSelected = _selectedIndex == index;
 
-  return GestureDetector(
-    onTap: () {
-      setState(() {
-        _selectedIndex = index;
-      });
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedIndex = index;
+        });
 
-      // Evitamos navegación si ya estamos en la pantalla actual
-      if (_selectedIndex == index) {
-        switch (index) {
-          case 0:
-            Navigator.pushReplacementNamed(context, '/homePage');
-            break;
-          case 1:
-            Navigator.pushReplacementNamed(context, '');
-            break;
-          case 2:
-            Navigator.pushReplacementNamed(context, '/settings');
-            break;
-          case 3:
-            Navigator.pushReplacementNamed(context, '/loginPage');
-            break;
+        // Evitamos navegación si ya estamos en la pantalla actual
+        if (_selectedIndex == index) {
+          switch (index) {
+            case 0:
+              Navigator.pushReplacementNamed(context, '/homePage');
+              break;
+            case 1:
+              Navigator.pushReplacementNamed(context, '');
+              break;
+            case 2:
+              Navigator.pushReplacementNamed(context, '/settings');
+              break;
+            case 3:
+              Navigator.pushReplacementNamed(context, '/loginPage');
+              break;
+          }
         }
-      }
-    },
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color:
+              isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
+          size: 24,
+        ),
       ),
-      child: Icon(
-        icon,
-        color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
-        size: 24,
-      ),
-    ),
-  );
-}
+    );
+  }
 
-  
   // Diálogo de éxito al guardar
   void _showSuccessDialog(BuildContext context) {
     showDialog(
