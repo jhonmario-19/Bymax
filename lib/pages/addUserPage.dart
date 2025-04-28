@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../controllers/firebaseController.dart'; // Importa tu controlador de Firebase
 
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
@@ -15,6 +16,12 @@ class _AddUserPageState extends State<AddUserPage> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _birthDateController = TextEditingController();
+  final _idNumberController = TextEditingController();
+
+  // Variable para el tipo de usuario
+  String _userType = "Adulto"; // Por defecto es Paciente
 
   // Añadimos el controlador para el scrollbar
   final ScrollController _scrollController = ScrollController();
@@ -25,8 +32,100 @@ class _AddUserPageState extends State<AddUserPage> {
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _addressController.dispose();
+    _birthDateController.dispose();
+    _idNumberController.dispose();
     _scrollController.dispose(); // Importante liberar el controlador del scroll
     super.dispose();
+  }
+
+  // Método para registrar usuario en Firebase
+  Future<void> _saveUserToFirebase() async {
+    try {
+      // Generamos una contraseña temporal o solicitamos al usuario que la establezca
+      // Esto es solo un ejemplo, puedes adaptarlo según tus necesidades
+      String tempPassword =
+          "Temporal123!"; // En un caso real, podría ser generada aleatoriamente
+
+      // Crea un mapa con los datos del usuario
+      Map<String, dynamic> userData = {
+        'nombre': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'telefono': _phoneController.text.trim(),
+        'direccion': _addressController.text.trim(),
+        'fechaNacimiento': _birthDateController.text.trim(),
+        'numeroIdentificacion': _idNumberController.text.trim(),
+        'tipoUsuario': _userType,
+        'fechaRegistro': DateTime.now().toString(),
+      };
+
+      // Registra el usuario usando Firebase Authentication y guarda los datos adicionales
+      final user = await FirebaseController.registerUser(
+        email: _emailController.text.trim(),
+        password: tempPassword,
+        userData: userData,
+      );
+
+      if (user != null) {
+        _showSuccessDialog(context);
+        // Limpiar los campos después de guardar exitosamente
+        _clearFields();
+      }
+    } catch (e) {
+      // Mostrar mensaje de error
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
+    }
+  }
+
+  // Método para mostrar el selector de fecha
+  Future<void> _selectBirthDate(BuildContext context) async {
+    DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(), // Fecha inicial del calendario
+      firstDate: DateTime(1900), // Fecha mínima seleccionable
+      lastDate: DateTime.now(), // Fecha máxima seleccionable
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF03d069), // Color del encabezado del calendario
+              onPrimary: Colors.white, // Color del texto en el encabezado
+              onSurface: Colors.black, // Color del texto en el calendario
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(
+                  0xFF03d069,
+                ), // Color del botón "OK"
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate != null) {
+      setState(() {
+        _birthDateController.text =
+            "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
+      });
+    }
+  }
+
+  // Método para limpiar los campos del formulario
+  void _clearFields() {
+    _nameController.clear();
+    _emailController.clear();
+    _phoneController.clear();
+    _addressController.clear();
+    _birthDateController.clear();
+    _idNumberController.clear();
+    setState(() {
+      _userType = "Adulto";
+    });
   }
 
   @override
@@ -72,7 +171,7 @@ class _AddUserPageState extends State<AddUserPage> {
                       size: 30,
                     ),
                     onPressed: () {
-                      Navigator.of(context).pop();
+                      Navigator.pushReplacementNamed(context, '/homePage');
                     },
                     padding: EdgeInsets.zero,
                     alignment: Alignment.centerLeft,
@@ -152,7 +251,7 @@ class _AddUserPageState extends State<AddUserPage> {
                   thumbVisibility:
                       true, // Hace que la barra sea siempre visible
                   thickness: 6, // Grosor del scrollbar
-                  radius: Radius.circular(
+                  radius: const Radius.circular(
                     10,
                   ), // Bordes redondeados para el scrollbar
                   child: SingleChildScrollView(
@@ -217,15 +316,25 @@ class _AddUserPageState extends State<AddUserPage> {
                           children: [
                             _buildUserTypeOption(
                               icon: Icons.person,
-                              label: 'Paciente',
-                              isSelected: true,
+                              label: 'Adulto',
+                              isSelected: _userType == "Adulto",
+                              onTap: () {
+                                setState(() {
+                                  _userType = "Adulto";
+                                });
+                              },
                             ),
 
                             const SizedBox(width: 12),
                             _buildUserTypeOption(
                               icon: Icons.family_restroom,
                               label: 'Familiar',
-                              isSelected: false,
+                              isSelected: _userType == "Familiar",
+                              onTap: () {
+                                setState(() {
+                                  _userType = "Familiar";
+                                });
+                              },
                             ),
                           ],
                         ),
@@ -234,7 +343,7 @@ class _AddUserPageState extends State<AddUserPage> {
                         const SizedBox(height: 16),
 
                         _buildTextField(
-                          controller: TextEditingController(),
+                          controller: _addressController,
                           label: 'Dirección',
                           icon: Icons.home,
                         ),
@@ -242,15 +351,21 @@ class _AddUserPageState extends State<AddUserPage> {
                         const SizedBox(height: 16),
 
                         _buildTextField(
-                          controller: TextEditingController(),
+                          controller: _birthDateController,
                           label: 'Fecha de nacimiento',
                           icon: Icons.calendar_today,
+                          keyboardType:
+                              TextInputType.none, // Deshabilita el teclado
+                          onTap:
+                              () => _selectBirthDate(
+                                context,
+                              ), // Abre el selector de fecha
                         ),
 
                         const SizedBox(height: 16),
 
                         _buildTextField(
-                          controller: TextEditingController(),
+                          controller: _idNumberController,
                           label: 'Número de identificación',
                           icon: Icons.badge,
                         ),
@@ -265,11 +380,8 @@ class _AddUserPageState extends State<AddUserPage> {
                             height: 45,
                             margin: const EdgeInsets.only(bottom: 20),
                             child: ElevatedButton(
-                              onPressed: () {
-                                // Aquí iría la lógica para guardar el usuario
-                                // Por ejemplo, mostrar un diálogo de confirmación
-                                _showSuccessDialog(context);
-                              },
+                              onPressed:
+                                  _saveUserToFirebase, // Llamamos al método para guardar en Firebase
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF03d069),
                                 foregroundColor: Colors.black,
@@ -299,12 +411,12 @@ class _AddUserPageState extends State<AddUserPage> {
     );
   }
 
-  // Widget para crear campos de texto personalizados
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
+    VoidCallback? onTap, // Nuevo parámetro opcional
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -315,6 +427,10 @@ class _AddUserPageState extends State<AddUserPage> {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        readOnly:
+            onTap !=
+            null, // Hace que el campo sea de solo lectura si `onTap` está definido
+        onTap: onTap, // Llama a la función `onTap` si se proporciona
         decoration: InputDecoration(
           border: InputBorder.none,
           labelText: label,
@@ -330,12 +446,11 @@ class _AddUserPageState extends State<AddUserPage> {
     required IconData icon,
     required String label,
     required bool isSelected,
+    required VoidCallback onTap,
   }) {
     return Expanded(
       child: GestureDetector(
-        onTap: () {
-          // Aquí se manejaría la selección del tipo de usuario
-        },
+        onTap: onTap, // Ahora podemos manejar la selección
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
@@ -383,14 +498,14 @@ class _AddUserPageState extends State<AddUserPage> {
           _selectedIndex = index;
         });
 
-        // Evitamos navegación si ya estamos en la pantalla actual
+        // Navegación según el índice seleccionado
         if (_selectedIndex == index) {
           switch (index) {
             case 0:
               Navigator.pushReplacementNamed(context, '/homePage');
               break;
             case 1:
-              Navigator.pushReplacementNamed(context, '');
+              // Ya estamos en la página de agregar usuario
               break;
             case 2:
               Navigator.pushReplacementNamed(context, '/settings');
@@ -424,7 +539,7 @@ class _AddUserPageState extends State<AddUserPage> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Usuario guardado'),
-          content: const Text('El usuario ha sido guardado exitosamente.'),
+          content: const Text('El usuario ha sido registrado exitosamente.'),
           actions: [
             TextButton(
               onPressed: () {
