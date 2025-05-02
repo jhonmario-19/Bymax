@@ -4,6 +4,7 @@ class UserModel {
   final String email;
   final String username;
   final DateTime fechaRegistro;
+  final String rol;
 
   UserModel({
     required this.uid,
@@ -11,6 +12,7 @@ class UserModel {
     required this.email,
     required this.username,
     required this.fechaRegistro,
+    required this.rol,
   });
 
   Map<String, dynamic> toMap() {
@@ -18,9 +20,9 @@ class UserModel {
       'uid': uid,
       'nombre': nombre,
       'email': email,
-      
       'username': username,
       'fechaRegistro': fechaRegistro.toIso8601String(),
+      'rol': rol, // Incluimos el rol en el mapa
     };
   }
 
@@ -31,6 +33,7 @@ class UserModel {
       email: map['email'],
       username: map['username'],
       fechaRegistro: DateTime.parse(map['fechaRegistro']),
+      rol: map['rol'] ?? 'user', // Valor predeterminado si no existe
     );
   }
 }

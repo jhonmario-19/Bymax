@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:bymax/pages/registerPage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -172,6 +173,28 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // Función para verificar el rol del usuario después de iniciar sesión
+  Future<Map<String, dynamic>> _checkUserRole(User user) async {
+    try {
+      DocumentSnapshot userDoc =
+          await FirebaseFirestore.instance
+              .collection('usuarios')
+              .doc(user.uid)
+              .get();
+
+      Map<String, dynamic>? userData = userDoc.data() as Map<String, dynamic>?;
+
+      if (userData != null && userData['rol'] == 'admin') {
+        return {'isAdmin': true, 'userData': userData};
+      } else {
+        return {'isAdmin': false, 'userData': userData};
+      }
+    } catch (e) {
+      print('Error al verificar el rol del usuario: $e');
+      return {'isAdmin': false, 'error': 'Error al verificar el rol: $e'};
+    }
+  }
+
   Future<void> _handleLogin() async {
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.trim().isEmpty) {
@@ -196,16 +219,42 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      setState(() {
-        _isLoading = false;
-      });
-
       if (result['success'] == true) {
-        // Guardar las credenciales si se seleccionó "Recordarme"
-        await _saveCredentials(email, password);
+        // Verificar el rol del usuario
+        final User? user = result['user'];
+        if (user != null) {
+          final roleInfo = await _checkUserRole(user);
 
-        Navigator.pushReplacementNamed(context, '/homePage');
+          // Guardar las credenciales si se seleccionó "Recordarme"
+          await _saveCredentials(email, password);
+
+          // Guardar información del rol en SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('is_admin', roleInfo['isAdmin'] ?? false);
+
+          setState(() {
+            _isLoading = false;
+          });
+
+          // Redirigir a homePage para todos los usuarios
+          Navigator.pushReplacementNamed(context, '/homePage');
+        } else {
+          setState(() {
+            _isLoading = false;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Error al obtener información del usuario'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       } else {
+        setState(() {
+          _isLoading = false;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result['message'] ?? 'Error al iniciar sesión'),

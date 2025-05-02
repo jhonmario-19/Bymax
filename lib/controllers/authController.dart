@@ -6,18 +6,20 @@ class AuthController {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // Método para iniciar sesión
-  static Future<Map<String, dynamic>> signIn(String email, String password) async {
+  static Future<Map<String, dynamic>> signIn(
+    String email,
+    String password,
+  ) async {
     try {
-      final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      final UserCredential userCredential = await _auth
+          .signInWithEmailAndPassword(email: email, password: password);
 
       if (userCredential.user != null) {
-        final userData = await _db
-            .collection('usuarios')
-            .doc(userCredential.user!.uid)
-            .get();
+        final userData =
+            await _db
+                .collection('usuarios')
+                .doc(userCredential.user!.uid)
+                .get();
 
         return {
           'success': true,
@@ -25,10 +27,7 @@ class AuthController {
           'userData': userData.data(),
         };
       } else {
-        return {
-          'success': false,
-          'message': 'No se pudo iniciar sesión',
-        };
+        return {'success': false, 'message': 'No se pudo iniciar sesión'};
       }
     } on FirebaseAuthException catch (e) {
       String message;
@@ -48,10 +47,7 @@ class AuthController {
         default:
           message = 'Error al iniciar sesión: ${e.message}';
       }
-      return {
-        'success': false,
-        'message': message,
-      };
+      return {'success': false, 'message': message};
     }
   }
 

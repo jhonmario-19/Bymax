@@ -4,14 +4,13 @@ import 'firebase_options.dart';
 import 'package:bymax/pages/loginPage.dart';
 import 'package:bymax/pages/homePage.dart';
 import 'package:bymax/pages/addUserPage.dart';
+import 'package:bymax/pages/user_list_page.dart';
 //import 'package:bymax/pages/recordatoryPage.dart'; // Página de configuraciones (temporal)
 import 'package:bymax/pages/activitiesPage.dart'; // Si deseas también usarla
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(MyApp());
 }
 
@@ -30,7 +29,7 @@ class MyApp extends StatelessWidget {
         '/addUser': (context) => const AddUserPage(),
         //'/settings': (context) => const RecordatoryPage(), // Usada como "ajustes"
         '/activities': (context) => const ActivitiesPage(),
-         
+        '/userList': (context) => const UserListPage(),
       },
     );
   }

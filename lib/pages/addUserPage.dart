@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../controllers/firebaseController.dart'; // Importa tu controlador de Firebase
+import '../controllers/FirebaseController.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
@@ -19,12 +20,32 @@ class _AddUserPageState extends State<AddUserPage> {
   final _addressController = TextEditingController();
   final _birthDateController = TextEditingController();
   final _idNumberController = TextEditingController();
+  final _usernameController =
+      TextEditingController(); // Para mostrar el username generado
+  final _passwordController =
+      TextEditingController(); // Para mostrar la contraseña generada
 
   // Variable para el tipo de usuario
-  String _userType = "Adulto"; // Por defecto es Paciente
+  String _userType = "Adulto"; // Por defecto es Adulto
+
+  // Variables para la familia
+  bool _createNewFamily = false; // Por defecto, no crear nueva familia
+  String? _selectedFamilyId;
+  String _newFamilyName = "";
+  final _newFamilyNameController = TextEditingController();
+  List<Map<String, dynamic>> _families = [];
+  bool _isLoadingFamilies = true;
 
   // Añadimos el controlador para el scrollbar
   final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFamilies();
+    // Generar nombre de usuario y contraseña inicial
+    _generateCredentials();
+  }
 
   @override
   void dispose() {
@@ -35,17 +56,118 @@ class _AddUserPageState extends State<AddUserPage> {
     _addressController.dispose();
     _birthDateController.dispose();
     _idNumberController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    _newFamilyNameController.dispose();
     _scrollController.dispose(); // Importante liberar el controlador del scroll
     super.dispose();
   }
 
+  // Método para cargar las familias desde Firestore
+  Future<void> _loadFamilies() async {
+    setState(() {
+      _isLoadingFamilies = true;
+    });
+
+    try {
+      QuerySnapshot familiesSnapshot =
+          await FirebaseFirestore.instance.collection('familias').get();
+
+      List<Map<String, dynamic>> loadedFamilies = [];
+      for (var doc in familiesSnapshot.docs) {
+        loadedFamilies.add({
+          'id': doc.id,
+          'nombre': doc['nombre'] ?? 'Sin nombre',
+        });
+      }
+
+      setState(() {
+        _families = loadedFamilies;
+        _isLoadingFamilies = false;
+        // Si hay familias, seleccionamos la primera por defecto
+        if (_families.isNotEmpty) {
+          _selectedFamilyId = _families[0]['id'];
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingFamilies = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error al cargar familias: $e')));
+    }
+  }
+
+  // Método para generar nombre de usuario y contraseña
+  void _generateCredentials() {
+    // Generar un nombre de usuario basado en el nombre completo si está disponible
+    if (_nameController.text.isNotEmpty) {
+      String fullName = _nameController.text.trim();
+      List<String> nameParts = fullName.split(' ');
+
+      // Tomar primera letra del nombre y apellido completo
+      String username = '';
+      if (nameParts.isNotEmpty) {
+        username = nameParts[0].toLowerCase();
+        if (nameParts.length > 1) {
+          // Añadir primera letra del apellido
+          username += nameParts.last[0].toLowerCase();
+        }
+        // Añadir números aleatorios para hacerlo único
+        username += '${DateTime.now().millisecondsSinceEpoch % 1000}';
+      } else {
+        username = 'user${DateTime.now().millisecondsSinceEpoch % 10000}';
+      }
+
+      _usernameController.text = username;
+    } else {
+      // Si no hay nombre, generar uno aleatorio
+      _usernameController.text =
+          'user${DateTime.now().millisecondsSinceEpoch % 10000}';
+    }
+
+    // Generar una contraseña aleatoria
+    String password = 'Pass${DateTime.now().millisecondsSinceEpoch % 10000}!';
+    _passwordController.text = password;
+  }
+
   // Método para registrar usuario en Firebase
   Future<void> _saveUserToFirebase() async {
+    // Validar campos requeridos
+    if (_nameController.text.isEmpty || _emailController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('El nombre y correo electrónico son obligatorios'),
+        ),
+      );
+      return;
+    }
+
     try {
-      // Generamos una contraseña temporal o solicitamos al usuario que la establezca
-      // Esto es solo un ejemplo, puedes adaptarlo según tus necesidades
-      String tempPassword =
-          "Temporal123!"; // En un caso real, podría ser generada aleatoriamente
+      // Determinar el ID de la familia
+      String familyId;
+      if (_createNewFamily && _newFamilyNameController.text.isNotEmpty) {
+        // Crear nueva familia
+        DocumentReference familyRef = await FirebaseFirestore.instance
+            .collection('familias')
+            .add({
+              'nombre': _newFamilyNameController.text.trim(),
+              'fechaCreacion': DateTime.now().toString(),
+            });
+        familyId = familyRef.id;
+      } else if (!_createNewFamily && _selectedFamilyId != null) {
+        // Usar familia existente
+        familyId = _selectedFamilyId!;
+      } else {
+        // No hay familia seleccionada o creada
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Es necesario seleccionar o crear una familia'),
+          ),
+        );
+        return;
+      }
 
       // Crea un mapa con los datos del usuario
       Map<String, dynamic> userData = {
@@ -55,18 +177,38 @@ class _AddUserPageState extends State<AddUserPage> {
         'direccion': _addressController.text.trim(),
         'fechaNacimiento': _birthDateController.text.trim(),
         'numeroIdentificacion': _idNumberController.text.trim(),
-        'tipoUsuario': _userType,
+        'username': _usernameController.text.trim(),
+        'rol': _userType,
+        'familiaId': familyId,
         'fechaRegistro': DateTime.now().toString(),
       };
 
       // Registra el usuario usando Firebase Authentication y guarda los datos adicionales
       final user = await FirebaseController.registerUser(
         email: _emailController.text.trim(),
-        password: tempPassword,
+        password: _passwordController.text.trim(),
         userData: userData,
       );
 
       if (user != null) {
+        // Recolectar el rol actual del usuario y actualizarlo
+        String currentRole = await FirebaseController.reloadCurrentUserRole();
+
+        // Verificamos si todavía es admin después de la operación
+        bool isAdmin = await FirebaseController.isCurrentUserAdmin();
+
+        if (!isAdmin) {
+          // Si perdió el rol de admin, mostramos un mensaje
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Advertencia: Se ha modificado su rol. Puede necesitar cerrar sesión y volver a iniciar.',
+              ),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+
         _showSuccessDialog(context);
         // Limpiar los campos después de guardar exitosamente
         _clearFields();
@@ -123,9 +265,21 @@ class _AddUserPageState extends State<AddUserPage> {
     _addressController.clear();
     _birthDateController.clear();
     _idNumberController.clear();
+    _usernameController.clear();
+    _passwordController.clear();
+    _newFamilyNameController.clear();
     setState(() {
       _userType = "Adulto";
+      _createNewFamily = false;
+      if (_families.isNotEmpty) {
+        _selectedFamilyId = _families[0]['id'];
+      } else {
+        _selectedFamilyId = null;
+      }
     });
+
+    // Generar nuevas credenciales
+    _generateCredentials();
   }
 
   @override
@@ -281,6 +435,7 @@ class _AddUserPageState extends State<AddUserPage> {
                           controller: _nameController,
                           label: 'Nombre completo',
                           icon: Icons.person,
+                          onChanged: (value) => _generateCredentials(),
                         ),
                         const SizedBox(height: 16),
 
@@ -300,9 +455,9 @@ class _AddUserPageState extends State<AddUserPage> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Selector de tipo de usuario
+                        // Selector de tipo de usuario (rol)
                         const Text(
-                          'Tipo de usuario',
+                          'Rol del usuario',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
@@ -339,7 +494,147 @@ class _AddUserPageState extends State<AddUserPage> {
                           ],
                         ),
 
-                        // Agregamos más campos para probar el scrollbar
+                        const SizedBox(height: 24),
+
+                        // Sección de asignación a familia
+                        const Text(
+                          'Asignación a Familia',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Opciones para la familia
+                        Row(
+                          children: [
+                            _buildFamilyOption(
+                              icon: Icons.group,
+                              label: 'Asignar a familia existente',
+                              isSelected: !_createNewFamily,
+                              onTap: () {
+                                setState(() {
+                                  _createNewFamily = false;
+                                });
+                              },
+                            ),
+
+                            const SizedBox(width: 12),
+                            _buildFamilyOption(
+                              icon: Icons.group_add,
+                              label: 'Crear nueva familia',
+                              isSelected: _createNewFamily,
+                              onTap: () {
+                                setState(() {
+                                  _createNewFamily = true;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Mostrar el selector de familia o campo para crear una nueva
+                        if (_createNewFamily)
+                          _buildTextField(
+                            controller: _newFamilyNameController,
+                            label: 'Nombre de la nueva familia',
+                            icon: Icons.add_home,
+                          )
+                        else
+                          _isLoadingFamilies
+                              ? const Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFF03d069),
+                                ),
+                              )
+                              : _families.isEmpty
+                              ? const Center(
+                                child: Text(
+                                  'No hay familias disponibles. Cree una nueva.',
+                                ),
+                              )
+                              : Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[200],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: DropdownButtonFormField<String>(
+                                  value: _selectedFamilyId,
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    labelText: 'Seleccionar familia',
+                                    prefixIcon: Icon(
+                                      Icons.family_restroom,
+                                      color: Color(0xFF03d069),
+                                    ),
+                                  ),
+                                  items:
+                                      _families.map((family) {
+                                        return DropdownMenuItem<String>(
+                                          value: family['id'],
+                                          child: Text(family['nombre']),
+                                        );
+                                      }).toList(),
+                                  onChanged: (String? newValue) {
+                                    setState(() {
+                                      _selectedFamilyId = newValue;
+                                    });
+                                  },
+                                ),
+                              ),
+
+                        const SizedBox(height: 24),
+
+                        // Sección de credenciales generadas
+                        const Text(
+                          'Credenciales autogeneradas',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _buildTextField(
+                                controller: _usernameController,
+                                label: 'Nombre de usuario',
+                                icon: Icons.person_outline,
+                                readOnly: true,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.refresh,
+                                color: Color(0xFF03d069),
+                              ),
+                              onPressed: _generateCredentials,
+                              tooltip: 'Regenerar credenciales',
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        _buildTextField(
+                          controller: _passwordController,
+                          label: 'Contraseña',
+                          icon: Icons.lock_outline,
+                          readOnly: true,
+                        ),
+
                         const SizedBox(height: 16),
 
                         _buildTextField(
@@ -416,7 +711,9 @@ class _AddUserPageState extends State<AddUserPage> {
     required String label,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
-    VoidCallback? onTap, // Nuevo parámetro opcional
+    VoidCallback? onTap,
+    Function(String)? onChanged,
+    bool readOnly = false,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -427,10 +724,9 @@ class _AddUserPageState extends State<AddUserPage> {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        readOnly:
-            onTap !=
-            null, // Hace que el campo sea de solo lectura si `onTap` está definido
-        onTap: onTap, // Llama a la función `onTap` si se proporciona
+        readOnly: readOnly || onTap != null,
+        onTap: onTap,
+        onChanged: onChanged,
         decoration: InputDecoration(
           border: InputBorder.none,
           labelText: label,
@@ -480,6 +776,54 @@ class _AddUserPageState extends State<AddUserPage> {
                   color:
                       isSelected ? const Color(0xFF03d069) : Colors.grey[600],
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Widget para las opciones de familia
+  Widget _buildFamilyOption({
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color:
+                isSelected
+                    ? const Color(0xFF03d069).withOpacity(0.2)
+                    : Colors.grey[200],
+            borderRadius: BorderRadius.circular(8),
+            border:
+                isSelected
+                    ? Border.all(color: const Color(0xFF03d069), width: 2)
+                    : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? const Color(0xFF03d069) : Colors.grey[600],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color:
+                      isSelected ? const Color(0xFF03d069) : Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -539,13 +883,25 @@ class _AddUserPageState extends State<AddUserPage> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Usuario guardado'),
-          content: const Text('El usuario ha sido registrado exitosamente.'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('El usuario ha sido registrado exitosamente.'),
+              const SizedBox(height: 12),
+              Text('Nombre de usuario: ${_usernameController.text}'),
+              Text('Contraseña: ${_passwordController.text}'),
+              const SizedBox(height: 8),
+              const Text(
+                'Recuerde compartir estas credenciales con el usuario.',
+                style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+              ),
+            ],
+          ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // Opcionalmente, navegar de vuelta a la página principal
-                // Navigator.of(context).pop();
               },
               child: const Text(
                 'OK',

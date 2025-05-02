@@ -158,7 +158,7 @@ class _homePageState extends State<homePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Hola Usuario',
+                            'Hola Aministrador',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,
@@ -263,6 +263,12 @@ class _homePageState extends State<homePage> {
                           label: 'Usuarios',
                           color: Colors.green,
                           textColor: Colors.black,
+                          onTap: () {
+                            Navigator.pushReplacementNamed(
+                              context,
+                              '/userList',
+                            ); // Navegar a la ruta '/userList'
+                          },
                         ),
 
                         const SizedBox(height: 15),

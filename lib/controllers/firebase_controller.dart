@@ -6,18 +6,22 @@ class FirebaseController {
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  // Definimos las constantes para los roles
+  static const String ROLE_ADMIN = 'admin';
+  static const String ROLE_USER = 'user';
+
   static Future<User?> registerWithEmail({
     required String email,
     required String password,
     required String nombre,
     required String username,
+    String role =
+        ROLE_ADMIN, // Por defecto es usuario regular, pero puede ser cambiado a admin
   }) async {
     try {
       // 1. Crear usuario en Authentication
-      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(email: email, password: password);
 
       // 2. Si el registro en Auth es exitoso, guardar en Firestore
       if (userCredential.user != null) {
@@ -28,6 +32,7 @@ class FirebaseController {
             email: email,
             username: username,
             fechaRegistro: DateTime.now(),
+            rol: role, // Usamos el rol que se pasa como parámetro
           ),
         );
       }
@@ -39,6 +44,22 @@ class FirebaseController {
     }
   }
 
+  // Método específico para registrar un administrador
+  static Future<User?> registerAdmin({
+    required String email,
+    required String password,
+    required String nombre,
+    required String username,
+  }) async {
+    return registerWithEmail(
+      email: email,
+      password: password,
+      nombre: nombre,
+      username: username,
+      role: ROLE_ADMIN, // Asignamos el rol de administrador
+    );
+  }
+
   static Future<void> _saveUserToFirestore(UserModel user) async {
     try {
       await _db.collection('usuarios').doc(user.uid).set(user.toMap());
@@ -48,17 +69,21 @@ class FirebaseController {
     }
   }
 
-  static Future<Map<String, dynamic>> signInWithEmail(String email, String password) async {
+  static Future<Map<String, dynamic>> signInWithEmail(
+    String email,
+    String password,
+  ) async {
     try {
       final UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
 
       if (userCredential.user != null) {
         // Obtener datos adicionales del usuario desde Firestore
-        final userData = await FirebaseFirestore.instance
-            .collection('usuarios')
-            .doc(userCredential.user!.uid)
-            .get();
+        final userData =
+            await FirebaseFirestore.instance
+                .collection('usuarios')
+                .doc(userCredential.user!.uid)
+                .get();
 
         return {
           'success': true,
@@ -66,10 +91,7 @@ class FirebaseController {
           'userData': userData.data(),
         };
       } else {
-        return {
-          'success': false,
-          'message': 'No se pudo iniciar sesión',
-        };
+        return {'success': false, 'message': 'No se pudo iniciar sesión'};
       }
     } on FirebaseAuthException catch (e) {
       String message;
@@ -89,17 +111,30 @@ class FirebaseController {
         default:
           message = 'Error al iniciar sesión: ${e.message}';
       }
-      return {
-        'success': false,
-        'message': message,
-      };
+      return {'success': false, 'message': message};
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Error inesperado: $e',
-      };
+      return {'success': false, 'message': 'Error inesperado: $e'};
     }
   }
+
+  // Verificar si el usuario actual es administrador
+  static Future<bool> isCurrentUserAdmin() async {
+    try {
+      User? currentUser = _auth.currentUser;
+      if (currentUser != null) {
+        DocumentSnapshot userDoc =
+            await _db.collection('usuarios').doc(currentUser.uid).get();
+        Map<String, dynamic>? userData =
+            userDoc.data() as Map<String, dynamic>?;
+        return userData != null && userData['rol'] == ROLE_ADMIN;
+      }
+      return false;
+    } catch (e) {
+      print('Error al verificar el rol del usuario: $e');
+      return false;
+    }
+  }
+
   static Future<void> signOut() async {
     try {
       await _auth.signOut();
