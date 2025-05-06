@@ -1,4 +1,4 @@
-import 'package:bymax/controllers/authController.dart';
+import 'package:bymax/controllers/loginController.dart';
 import 'package:bymax/pages/activitiesPage.dart';
 import 'package:bymax/pages/recordatoryPage.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +11,7 @@ class homePage extends StatefulWidget {
 }
 
 class _homePageState extends State<homePage> {
-  int _selectedIndex = 2;
+  int _selectedIndex = 0;
   // Controlador para el scrollbar
   final ScrollController _scrollController = ScrollController();
 
@@ -100,7 +100,7 @@ class _homePageState extends State<homePage> {
                       // Si el usuario confirma, cerrar sesión y regresar al login
                       if (shouldExit == true) {
                         try {
-                          await AuthController.signOut();
+                          await LoginController.signOut();
                           if (!mounted) return;
 
                           Navigator.pushReplacementNamed(context, '/loginPage');
@@ -354,7 +354,7 @@ class _homePageState extends State<homePage> {
               break;
             case 3:
               try {
-                await AuthController.signOut();
+                await LoginController.signOut();
                 if (!mounted) return;
 
                 ScaffoldMessenger.of(context).showSnackBar(

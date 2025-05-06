@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../controllers/FirebaseController.dart';
+import '../controllers/userController.dart';
+import '../controllers/userController.dart';
 
 class UserListPage extends StatefulWidget {
   const UserListPage({super.key});
@@ -9,6 +10,7 @@ class UserListPage extends StatefulWidget {
 }
 
 class _UserListPageState extends State<UserListPage> {
+  int _selectedIndex = 1;
   final ScrollController _scrollController = ScrollController();
 
   // Lista para almacenar los usuarios
@@ -31,14 +33,17 @@ class _UserListPageState extends State<UserListPage> {
   }
 
   Future<void> _loadUsuariosYFamilias() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
       // Recargar el rol del usuario actual
-      String currentRole = await FirebaseController.reloadCurrentUserRole();
-      if (currentRole != FirebaseController.ROLE_ADMIN) {
+      String currentRole = await UserController.reloadCurrentUserRole();
+      if (currentRole != UserController.ROLE_ADMIN) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -51,24 +56,26 @@ class _UserListPageState extends State<UserListPage> {
       }
 
       // Obtener el usuario actual
-      final currentUser = FirebaseController.auth.currentUser;
+      final currentUser = UserController.auth.currentUser;
       if (currentUser == null) {
         throw Exception("No se encontró al usuario actual.");
       }
 
       // Obtener usuarios creados por el administrador actual
       List<Map<String, dynamic>> usuarios =
-          await FirebaseController.getUsersCreatedByAdmin(currentUser.uid);
+          await UserController.getUsersCreatedByAdmin(currentUser.uid);
 
       // Obtener todas las familias
-      Map<String, String> familias = await FirebaseController.getFamilies();
+      Map<String, String> familias = await UserController.getFamilies();
 
+      if (!mounted) return;
       setState(() {
         _usuarios = usuarios;
         _familias = familias;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
@@ -203,87 +210,86 @@ class _UserListPageState extends State<UserListPage> {
                     bottom: Radius.zero,
                   ),
                 ),
-                child: Scrollbar(
-                  controller: _scrollController,
-                  thumbVisibility: true,
-                  thickness: 6,
-                  radius: const Radius.circular(10),
-                  child: Column(
-                    children: [
-                      // Cabecera con título y filtros
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Título de la sección
-                            const Center(
-                              child: Text(
-                                'Lista de Usuarios',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
+                child: Column(
+                  children: [
+                    // Cabecera con título y filtros
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Título de la sección
+                          const Center(
+                            child: Text(
+                              'Lista de Usuarios',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            // Filtros por rol
-                            Row(
-                              children: [
-                                const Text(
-                                  'Filtrar por: ',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                          ),
+                          const SizedBox(height: 16),
+                          // Filtros por rol
+                          Row(
+                            children: [
+                              const Text(
+                                'Filtrar por: ',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                                const SizedBox(width: 8),
-                                _buildFilterChip('Todos'),
-                                const SizedBox(width: 4),
-                                _buildFilterChip('Adulto'),
-                                const SizedBox(width: 4),
-                                _buildFilterChip('Familiar'),
-                              ],
-                            ),
-                          ],
-                        ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFilterChip('Todos'),
+                              const SizedBox(width: 4),
+                              _buildFilterChip('Adulto'),
+                              const SizedBox(width: 4),
+                              _buildFilterChip('Familiar'),
+                            ],
+                          ),
+                        ],
                       ),
-                      // Lista de usuarios
-                      Expanded(
-                        child:
-                            _isLoading
-                                ? const Center(
-                                  child: CircularProgressIndicator(
-                                    color: Color(0xFF03d069),
-                                  ),
-                                )
-                                : filteredUsers.isEmpty
-                                ? const Center(
+                    ),
+                    // Lista de usuarios
+                    Expanded(
+                      child: _isLoading
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF03d069),
+                              ),
+                            )
+                          : filteredUsers.isEmpty
+                              ? const Center(
                                   child: Text('No hay usuarios para mostrar'),
                                 )
-                                : ListView.builder(
+                              : Scrollbar(
                                   controller: _scrollController,
-                                  padding: const EdgeInsets.all(16),
-                                  itemCount: filteredUsers.length,
-                                  itemBuilder: (context, index) {
-                                    final usuario = filteredUsers[index];
-                                    // Obtener nombre de familia o usar placeholder
-                                    final familyName =
-                                        usuario['familiaId'] != null
-                                            ? _familias[usuario['familiaId']] ??
-                                                'Familia desconocida'
-                                            : 'Sin familia';
+                                  thumbVisibility: true,
+                                  thickness: 6,
+                                  radius: const Radius.circular(10),
+                                  child: ListView.builder(
+                                    controller: _scrollController,
+                                    padding: const EdgeInsets.all(16),
+                                    itemCount: filteredUsers.length,
+                                    itemBuilder: (context, index) {
+                                      final usuario = filteredUsers[index];
+                                      // Obtener nombre de familia o usar placeholder
+                                      final familyName =
+                                          usuario['familiaId'] != null
+                                              ? _familias[usuario['familiaId']] ??
+                                                  'Familia desconocida'
+                                              : 'Sin familia';
 
-                                    return _buildUsuarioCard(
-                                      usuario,
-                                      familyName,
-                                    );
-                                  },
+                                      return _buildUsuarioCard(
+                                        usuario,
+                                        familyName,
+                                      );
+                                    },
+                                  ),
                                 ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -346,12 +352,66 @@ class _UserListPageState extends State<UserListPage> {
   }
 
   // Widget para cada icono de la barra de navegación
-  Widget _buildNavBarItem(IconData icon, int index) {
+    Widget _buildNavBarItem(IconData icon, int index) {
+    final bool isSelected = _selectedIndex == index;
+
     return GestureDetector(
-      onTap: () {
-        // Implementar navegación según el índice
+      onTap: () async {
+        setState(() {
+          _selectedIndex = index;
+        });
+
+        if (_selectedIndex == index) {
+          switch (index) {
+            case 0:
+              Navigator.pushReplacementNamed(context, '/homePage');
+              break;
+            case 1:
+              Navigator.pushReplacementNamed(context, '/addUser');
+              break;
+            case 2:
+              Navigator.pushReplacementNamed(context, '/settings');
+              break;
+            case 3:
+              try {
+                await UserController.signOut();
+                if (!mounted) return;
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Sesión cerrada correctamente'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+
+                Navigator.pushReplacementNamed(context, '/loginPage');
+              } catch (e) {
+                if (!mounted) return;
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error al cerrar sesión: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+              break;
+          }
+        }
       },
-      child: Icon(icon),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color:
+              isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
+          size: 24,
+        ),
+      ),
     );
   }
 }

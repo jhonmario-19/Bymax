@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../controllers/firebase_controller.dart';
+import '../controllers/registerController.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -247,7 +247,7 @@ class _RegisterPageState extends State<RegisterPage> {
                             if (_passwordController.text == _confirmPasswordController.text &&
                                 _aceptarTerminos) {
                               try {
-                                final user = await FirebaseController.registerWithEmail(
+                                final user = await RegisterController.registerWithEmail(
                                   email: _emailController.text.trim(),
                                   password: _passwordController.text.trim(),
                                   nombre: _nombreController.text.trim(),

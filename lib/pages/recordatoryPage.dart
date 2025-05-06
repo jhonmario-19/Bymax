@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../controllers/recordatoryController.dart';
+import '../models/recordatoryModel.dart';
 
 class RecordatoryPage extends StatefulWidget {
   const RecordatoryPage({super.key});
@@ -8,191 +11,270 @@ class RecordatoryPage extends StatefulWidget {
 }
 
 class _RecordatoryPageState extends State<RecordatoryPage> {
-
   int _selectedIndex = 2;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // Movemos la barra de navegación al bottomNavigationBar del Scaffold
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: Color(0xFF03d069),
+    return ChangeNotifierProvider(
+      create: (_) => RecordatoryController(), // Inicializa el controlador con Firebase
+      child: Scaffold(
+        bottomNavigationBar: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Color(0xFF03d069),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildNavBarItem(Icons.home, 0),
+              _buildNavBarItem(Icons.add, 1),
+              _buildNavBarItem(Icons.settings, 2),
+              _buildNavBarItem(Icons.logout, 3),
+            ],
+          ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildNavBarItem(Icons.home, 0),
-            _buildNavBarItem(Icons.add,1),
-            _buildNavBarItem(Icons.settings,2),
-            _buildNavBarItem(Icons.logout,3),
-          ],
-        ),
-      ),
-      body: Container(
-        width: double.infinity,
-        color: const Color(0xFF03d069), // Color verde de fondo
-        child: Column(
-          children: [
-            // Header verde con saludo
-            Container(
-              padding: const EdgeInsets.only(top: 30, left: 16, right: 16, bottom: 8),
-              color: const Color(0xFF03d069),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 16),
-
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white, size: 30),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    padding: EdgeInsets.zero,
-                    alignment: Alignment.centerLeft,
-                  ),
-
-                  // Logo Bymax
-                  Row(
-                    children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          image: DecorationImage(
-                            // Corregir la ruta de la imagen - quitar la barra inicial
-                            image: AssetImage('lib/pages/images/logo.png'),
-                            fit: BoxFit.cover,
-                          ),
-                        )
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Bymax',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 35,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  
-                  // Saludo con texto blanco
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.grey[300],
-                        child: const Icon(Icons.person, color: Colors.grey),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Hola Usuario,',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const Text(
-                            'Hoy es un día maravilloso',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            
-            // Contenido principal con fondo blanco
-            Expanded(
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(20),
-                    bottom: Radius.zero,
-                  ),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        body: Container(
+          width: double.infinity,
+          color: const Color(0xFF03d069),
+          child: Column(
+            children: [
+              // Header verde con saludo
+              Container(
+                padding: const EdgeInsets.only(
+                    top: 30, left: 16, right: 16, bottom: 8),
+                color: const Color(0xFF03d069),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Recordatorio 1: Medicamento
-                    _buildReminderItem(
-                      icon: Icons.medication_outlined,
-                      title: 'Medicamento',
-                      date: '2 de marzo 2025',
+                    const SizedBox(height: 16),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back,
+                          color: Colors.white, size: 30),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                      },
+                      padding: EdgeInsets.zero,
+                      alignment: Alignment.centerLeft,
                     ),
-                    const SizedBox(height: 12),
-                    
-                    // Recordatorio 2: Cita médica
-                    _buildReminderItem(
-                      icon: Icons.calendar_month_outlined,
-                      title: 'cita medica',
-                      date: '2 de marzo 2025',
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    // Recordatorio 3: Terapia
-                    _buildReminderItem(
-                      icon: Icons.fitness_center_outlined,
-                      title: 'Terapia',
-                      date: '3 de marzo 2025',
-                    ),
-                    
-                    // Espaciador
-                    Expanded(child: Container()),
-                    
-                    // Botón "AGREGAR RECORDATORIO"
-                    Container(
-                      width: 240,
-                      height: 45,
-                      margin: const EdgeInsets.only(bottom: 20),
-                      child: ElevatedButton(
-                        onPressed: () {},
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF03d069),
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
+                    Row(
+                      children: [
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            image: DecorationImage(
+                              image: AssetImage('lib/pages/images/logo.png'),
+                              fit: BoxFit.cover,
+                            ),
                           ),
                         ),
-                        child: const Text(
-                          'AGREGAR RECORDATORIO',
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Bymax',
                           style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 35,
                             fontWeight: FontWeight.bold,
-                            fontSize: 14,
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                    
-                    // Eliminamos la barra de navegación de aquí ya que ahora está en bottomNavigationBar
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 16,
+                          backgroundColor: Colors.grey[300],
+                          child: const Icon(Icons.person, color: Colors.grey),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'Hola Usuario,',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              'Hoy es un día maravilloso',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            ),
-          ],
+
+              // Contenido principal con fondo blanco
+              Expanded(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(20),
+                      bottom: Radius.zero,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                  child: Consumer<RecordatoryController>(
+                    builder: (context, controller, child) {
+                      // Mostrar indicador de carga si está cargando datos
+                      if (controller.isLoading) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF03d069),
+                          ),
+                        );
+                      }
+                      
+                      return Column(
+                        children: [
+                          Expanded(
+                            child: controller.recordatories.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.notifications_off_outlined,
+                                          size: 64,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          'No hay recordatorios',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            color: Colors.grey[600],
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Agrega un nuevo recordatorio usando el botón inferior',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.grey[500],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    itemCount: controller.recordatories.length,
+                                    itemBuilder: (context, index) {
+                                      final recordatory = controller.recordatories[index];
+                                      return Dismissible(
+                                        key: Key(recordatory.id.toString()),
+                                        background: Container(
+                                          color: Colors.red,
+                                          alignment: Alignment.centerRight,
+                                          padding: const EdgeInsets.only(right: 20),
+                                          child: const Icon(
+                                            Icons.delete,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        direction: DismissDirection.endToStart,
+                                        confirmDismiss: (direction) async {
+                                          return await showDialog(
+                                            context: context,
+                                            builder: (BuildContext context) {
+                                              return AlertDialog(
+                                                title: const Text("Confirmar"),
+                                                content: const Text("¿Estás seguro de que quieres eliminar este recordatorio?"),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () => Navigator.of(context).pop(false),
+                                                    child: const Text("Cancelar"),
+                                                  ),
+                                                  TextButton(
+                                                    onPressed: () => Navigator.of(context).pop(true),
+                                                    child: const Text("Eliminar"),
+                                                  ),
+                                                ],
+                                              );
+                                            },
+                                          );
+                                        },
+                                        onDismissed: (direction) {
+                                          controller.deleteRecordatory(recordatory.id);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text("Recordatorio eliminado"),
+                                              backgroundColor: Color(0xFF03d069),
+                                            ),
+                                          );
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(bottom: 12),
+                                          child: _buildReminderItem(
+                                            icon: _getIconForType(recordatory.type),
+                                            title: recordatory.title,
+                                            date: recordatory.date,
+                                            isNotificationEnabled: recordatory.isNotificationEnabled,
+                                            onNotificationToggle: () async {
+                                              // Usar await para la operación asíncrona
+                                              await controller.toggleNotification(recordatory.id);
+                                            },
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                          Container(
+                            width: 240,
+                            height: 45,
+                            margin: const EdgeInsets.only(bottom: 20),
+                            child: ElevatedButton(
+                              onPressed: () =>
+                                  _showAddRecordatoryDialog(context, controller),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF03d069),
+                                foregroundColor: Colors.black,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(25),
+                                ),
+                              ),
+                              child: const Text(
+                                'AGREGAR RECORDATORIO',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // Widget para cada elemento de recordatorio
   Widget _buildReminderItem({
     required IconData icon,
     required String title,
     required String date,
+    required bool isNotificationEnabled,
+    required VoidCallback onNotificationToggle,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -202,7 +284,6 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
       ),
       child: Row(
         children: [
-          // Icono en cuadrado negro
           Container(
             width: 40,
             height: 40,
@@ -217,7 +298,6 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
             ),
           ),
           const SizedBox(width: 12),
-          // Título y fecha
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,58 +319,195 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
               ],
             ),
           ),
-          // Icono de notificación
-          Icon(
-            Icons.notifications,
-            color: Colors.black,
-            size: 24,
+          IconButton(
+            icon: Icon(
+              isNotificationEnabled
+                  ? Icons.notifications_active
+                  : Icons.notifications_off,
+              color: isNotificationEnabled ? Colors.black : Colors.grey,
+            ),
+            onPressed: onNotificationToggle,
           ),
         ],
       ),
     );
   }
 
-  // Widget para cada icono de la barra de navegación
   Widget _buildNavBarItem(IconData icon, int index) {
-  final bool isSelected = _selectedIndex == index;
+    final bool isSelected = _selectedIndex == index;
 
-  return GestureDetector(
-    onTap: () {
-      setState(() {
-        _selectedIndex = index;
-      });
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedIndex = index;
+        });
 
-      // Evitamos navegación si ya estamos en la pantalla actual
-      if (_selectedIndex == index) {
-        switch (index) {
-          case 0:
-            Navigator.pushReplacementNamed(context, '/homePage');
-            break;
-          case 1:
-            Navigator.pushReplacementNamed(context, '/addUser');
-            break;
-          case 2:
-            Navigator.pushReplacementNamed(context, '/settings');
-            break;
-          case 3:
-            Navigator.pushReplacementNamed(context, '/loginPage');
-            break;
+        if (_selectedIndex == index) {
+          switch (index) {
+            case 0:
+              Navigator.pushReplacementNamed(context, '/homePage');
+              break;
+            case 1:
+              Navigator.pushReplacementNamed(context, '/addUser');
+              break;
+            case 2:
+              Navigator.pushReplacementNamed(context, '/settings');
+              break;
+            case 3:
+              Navigator.pushReplacementNamed(context, '/loginPage');
+              break;
+          }
         }
-      }
-    },
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
+          size: 24,
+        ),
       ),
-      child: Icon(
-        icon,
-        color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
-        size: 24,
-      ),
-    ),
-  );
+    );
   }
 
+  IconData _getIconForType(String type) {
+    switch (type) {
+      case 'medicina':
+        return Icons.medication_outlined;
+      case 'actividad':
+        return Icons.calendar_month_outlined;
+      case 'terapia':
+        return Icons.fitness_center_outlined;
+      default:
+        return Icons.event_note;
+    }
+  }
+
+  void _showAddRecordatoryDialog(
+      BuildContext context, RecordatoryController controller) {
+    final titleController = TextEditingController();
+    final dateController = TextEditingController();
+    String selectedType = 'medicina';
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Nuevo Recordatorio'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(labelText: 'Título'),
+            ),
+            TextField(
+              controller: dateController,
+              decoration: const InputDecoration(labelText: 'Fecha'),
+              readOnly: true,
+              onTap: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: DateTime.now(),
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime(2025, 12, 31),
+                );
+                if (date != null) {
+                  dateController.text = "${date.day}/${date.month}/${date.year}";
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            DropdownButton<String>(
+              value: selectedType,
+              items: ['medicina', 'actividad', 'terapia']
+                  .map((type) => DropdownMenuItem(
+                        value: type,
+                        child: Text(type),
+                      ))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  selectedType = value;
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () async {
+              if (titleController.text.isNotEmpty &&
+                  dateController.text.isNotEmpty) {
+                // Mostrar indicador de carga mientras se agrega
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (BuildContext context) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF03d069),
+                      ),
+                    );
+                  },
+                );
+
+                try {
+                  // Usar await para la operación asíncrona
+                  await controller.addRecordatory(
+                    Recordatory(
+                      id: DateTime.now().millisecondsSinceEpoch,
+                      title: titleController.text,
+                      date: dateController.text,
+                      type: selectedType,
+                    ),
+                  );
+                  
+                  // Cerrar el diálogo de carga
+                  Navigator.pop(context);
+                  
+                  // Cerrar el diálogo de agregar recordatorio
+                  Navigator.pop(context);
+                  
+                  // Mostrar mensaje de éxito
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Recordatorio guardado correctamente"),
+                      backgroundColor: Color(0xFF03d069),
+                    ),
+                  );
+                } catch (e) {
+                  // Cerrar el diálogo de carga
+                  Navigator.pop(context);
+                  
+                  // Mostrar mensaje de error
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Error al guardar: $e"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Por favor completa todos los campos"),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -1,4 +1,4 @@
-import 'package:bymax/controllers/authController.dart';
+import 'package:bymax/controllers/loginController.dart';
 import 'package:flutter/material.dart';
 import 'package:bymax/pages/registerPage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -215,7 +215,7 @@ class _LoginPageState extends State<LoginPage> {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
 
-      final result = await AuthController.signIn(email, password);
+      final result = await LoginController.signIn(email, password);
 
       if (!mounted) return;
 

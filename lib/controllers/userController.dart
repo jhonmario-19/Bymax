@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math';
 
-class FirebaseController {
+class UserController {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static FirebaseAuth get auth => _auth;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -45,30 +45,35 @@ class FirebaseController {
         throw Exception("No se encontró al usuario actual.");
       }
 
+      // Guardar temporalmente la referencia del admin
+      final adminAuth = _auth.currentUser;
+
       // Crear el usuario en Firebase Authentication
-      UserCredential userCredential = await _auth
-          .createUserWithEmailAndPassword(email: email, password: password);
+      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
+        email: email, 
+        password: password
+      );
 
       // Guardar los datos adicionales en Firestore
       String userId = userCredential.user!.uid;
       await _firestore.collection('usuarios').doc(userId).set({
         ...userData,
         'uid': userId,
-        'createdBy': currentUser.uid, // Agregar el UID del usuario
+        'createdBy': currentUser.uid,
       });
 
       // Si el usuario pertenece a una familia, actualizar la familia
       if (userData['familiaId'] != null) {
         await addUserToFamily(userData['familiaId'], userId);
-      } else {
-        throw Exception("No se seleccionó una familia válida.");
       }
 
-      // Importante: Guardar el usuario actual nuevamente
-      User? adminUser = await refreshCurrentUser();
-
-      // Recargar el rol del administrador actual y almacenarlo
-      _currentUserRole = await reloadCurrentUserRole();
+      // Volver a iniciar sesión como admin para mantener sus credenciales
+      if (adminAuth != null) {
+        String? token = await adminAuth.getIdToken();
+        if (token != null) {
+          await _auth.signInWithCustomToken(token);
+        }
+      }
 
       return {
         'success': true,

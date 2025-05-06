@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../controllers/FirebaseController.dart';
+import '../controllers/userController.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:get/get.dart';
+import '../controllers/authStateController.dart';
 
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
@@ -10,8 +12,8 @@ class AddUserPage extends StatefulWidget {
 }
 
 class _AddUserPageState extends State<AddUserPage> {
-  int _selectedIndex =
-      1; // Por defecto seleccionamos la opción de agregar (índice 1)
+  int _selectedIndex = 1;
+  final AuthStateController authController = Get.find<AuthStateController>();
 
   // Controladores para los campos de texto
   final _nameController = TextEditingController();
@@ -20,10 +22,8 @@ class _AddUserPageState extends State<AddUserPage> {
   final _addressController = TextEditingController();
   final _birthDateController = TextEditingController();
   final _idNumberController = TextEditingController();
-  final _usernameController =
-      TextEditingController(); // Para mostrar el username generado
-  final _passwordController =
-      TextEditingController(); // Para mostrar la contraseña generada
+  final _usernameController = TextEditingController(); // Para mostrar el username generado
+  final _passwordController = TextEditingController(); // Para mostrar la contraseña generada
 
   // Variable para el tipo de usuario
   String _userType = "Adulto"; // Por defecto es Adulto
@@ -42,9 +42,11 @@ class _AddUserPageState extends State<AddUserPage> {
   @override
   void initState() {
     super.initState();
+    authController.initializeAdmin();
     _loadFamilies();
     // Generar nombre de usuario y contraseña inicial
     _generateCredentials();
+
   }
 
   @override
@@ -134,42 +136,40 @@ class _AddUserPageState extends State<AddUserPage> {
 
   // Método para registrar usuario en Firebase
   Future<void> _saveUserToFirebase() async {
-    // Validar campos requeridos
     if (_nameController.text.isEmpty || _emailController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('El nombre y correo electrónico son obligatorios'),
-        ),
+        const SnackBar(content: Text('El nombre y correo electrónico son obligatorios')),
       );
       return;
     }
 
     try {
-      // Determinar el ID de la familia
+      // Envolver la operación de guardado en Obx para mantener estado del admin
+      Obx(() {
+        if (authController.adminUser == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return Container(); // Widget vacío cuando el admin está disponible
+      });
+
       String familyId;
       if (_createNewFamily && _newFamilyNameController.text.isNotEmpty) {
-        // Crear nueva familia
         DocumentReference familyRef = await FirebaseFirestore.instance
             .collection('familias')
             .add({
-              'nombre': _newFamilyNameController.text.trim(),
-              'fechaCreacion': DateTime.now().toString(),
-            });
+          'nombre': _newFamilyNameController.text.trim(),
+          'fechaCreacion': DateTime.now().toString(),
+        });
         familyId = familyRef.id;
       } else if (!_createNewFamily && _selectedFamilyId != null) {
-        // Usar familia existente
         familyId = _selectedFamilyId!;
       } else {
-        // No hay familia seleccionada o creada
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Es necesario seleccionar o crear una familia'),
-          ),
+          const SnackBar(content: Text('Es necesario seleccionar o crear una familia')),
         );
         return;
       }
 
-      // Crea un mapa con los datos del usuario
       Map<String, dynamic> userData = {
         'nombre': _nameController.text.trim(),
         'email': _emailController.text.trim(),
@@ -183,41 +183,26 @@ class _AddUserPageState extends State<AddUserPage> {
         'fechaRegistro': DateTime.now().toString(),
       };
 
-      // Registra el usuario usando Firebase Authentication y guarda los datos adicionales
-      final user = await FirebaseController.registerUser(
+      // Registrar usuario usando FirebaseController
+      final result = await UserController.registerUser(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
         userData: userData,
       );
 
-      if (user != null) {
-        // Recolectar el rol actual del usuario y actualizarlo
-        String currentRole = await FirebaseController.reloadCurrentUserRole();
-
-        // Verificamos si todavía es admin después de la operación
-        bool isAdmin = await FirebaseController.isCurrentUserAdmin();
-
-        if (!isAdmin) {
-          // Si perdió el rol de admin, mostramos un mensaje
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Advertencia: Se ha modificado su rol. Puede necesitar cerrar sesión y volver a iniciar.',
-              ),
-              duration: Duration(seconds: 5),
-            ),
-          );
-        }
-
+      if (result['success']) {
+        // Actualizar el estado del admin después de la operación
+        await authController.initializeAdmin();
+        
         _showSuccessDialog(context);
-        // Limpiar los campos después de guardar exitosamente
         _clearFields();
+      } else {
+        throw Exception(result['message']);
       }
     } catch (e) {
-      // Mostrar mensaje de error
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al guardar: $e')),
+      );
     }
   }
 

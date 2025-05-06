@@ -1,5 +1,7 @@
+import 'package:bymax/controllers/authStateController.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:get/get.dart';
 import 'firebase_options.dart';
 import 'package:bymax/pages/loginPage.dart';
 import 'package:bymax/pages/homePage.dart';
@@ -11,7 +13,11 @@ import 'package:bymax/pages/activitiesPage.dart'; // Si deseas también usarla
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(MyApp());
+  
+  // Inicializar el controlador de autenticación
+  Get.put(AuthStateController());
+  
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
