@@ -32,63 +32,54 @@ class UserController {
     }
   }
 
-  // Método para registrar un usuario con asignación a familia
-  static Future<Map<String, dynamic>> registerUser({
+  // Método mejorado para registrar usuarios sin afectar la sesión actual del admin
+  static Future<Map<String, dynamic>> registerNewUser({
     required String email,
     required String password,
     required Map<String, dynamic> userData,
+    required String adminPassword, // Nuevo parámetro
   }) async {
     try {
-      // Obtener el usuario actual (administrador)
       final currentUser = _auth.currentUser;
       if (currentUser == null) {
-        throw Exception("No se encontró al usuario actual.");
+        throw Exception("No se encontró al usuario administrador actual.");
       }
+      final adminEmail = currentUser.email;
 
-      // Guardar temporalmente la referencia del admin
-      final adminAuth = _auth.currentUser;
-
-      // Crear el usuario en Firebase Authentication
+      // Crear el usuario (esto cambia la sesión)
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email, 
-        password: password
+        email: email,
+        password: password,
       );
 
-      // Guardar los datos adicionales en Firestore
-      String userId = userCredential.user!.uid;
-      await _firestore.collection('usuarios').doc(userId).set({
+      final Map<String, dynamic> finalUserData = {
         ...userData,
-        'uid': userId,
+        'uid': userCredential.user!.uid,
         'createdBy': currentUser.uid,
-      });
+        'isAdmin': false,
+        'rol': userData['rol'] ?? ROLE_USER,
+      };
 
-      // Si el usuario pertenece a una familia, actualizar la familia
-      if (userData['familiaId'] != null) {
-        await addUserToFamily(userData['familiaId'], userId);
-      }
+      await _firestore
+          .collection('usuarios')
+          .doc(userCredential.user!.uid)
+          .set(finalUserData);
 
-      // Volver a iniciar sesión como admin para mantener sus credenciales
-      if (adminAuth != null) {
-        String? token = await adminAuth.getIdToken();
-        if (token != null) {
-          await _auth.signInWithCustomToken(token);
-        }
+      // Volver a loguear al admin
+      if (adminEmail != null && adminPassword.isNotEmpty) {
+        await _auth.signOut();
+        await _auth.signInWithEmailAndPassword(
+          email: adminEmail,
+          password: adminPassword,
+        );
       }
 
       return {
         'success': true,
-        'usuario': {
-          'id': userId,
-          'nombre': userData['nombre'],
-          'email': email,
-          'username': userData['username'],
-          'password': password,
-          'familiaId': userData['familiaId'],
-          'tipoUsuario': userData['rol'],
-        },
+        'usuario': finalUserData,
       };
     } catch (e) {
-      print("Error al registrar usuario: $e");
+      print("Error al registrar nuevo usuario: $e");
       return {'success': false, 'message': 'Error al registrar usuario: $e'};
     }
   }
@@ -266,9 +257,9 @@ class UserController {
       }
 
       // Guardar el rol en nuestra variable estática
-      _currentUserRole = userDoc['rol'] ?? ROLE_ADMIN;
+      _currentUserRole = userDoc['rol'] ?? ROLE_USER;
 
-      return _currentUserRole!; // Devuelve el rol o 'user' por defecto
+      return _currentUserRole!; // Devuelve el rol
     } catch (e) {
       print("Error al recargar el rol del usuario: $e");
       throw Exception("Error al recargar el rol del usuario.");

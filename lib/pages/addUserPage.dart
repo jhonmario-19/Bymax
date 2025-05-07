@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../controllers/userController.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:get/get.dart';
-import '../controllers/authStateController.dart';
 
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
@@ -12,8 +10,8 @@ class AddUserPage extends StatefulWidget {
 }
 
 class _AddUserPageState extends State<AddUserPage> {
-  int _selectedIndex = 1;
-  final AuthStateController authController = Get.find<AuthStateController>();
+  int _selectedIndex =
+      1; // Por defecto seleccionamos la opción de agregar (índice 1)
 
   // Controladores para los campos de texto
   final _nameController = TextEditingController();
@@ -22,8 +20,10 @@ class _AddUserPageState extends State<AddUserPage> {
   final _addressController = TextEditingController();
   final _birthDateController = TextEditingController();
   final _idNumberController = TextEditingController();
-  final _usernameController = TextEditingController(); // Para mostrar el username generado
-  final _passwordController = TextEditingController(); // Para mostrar la contraseña generada
+  final _usernameController =
+      TextEditingController(); // Para mostrar el username generado
+  final _passwordController =
+      TextEditingController(); // Para mostrar la contraseña generada
 
   // Variable para el tipo de usuario
   String _userType = "Adulto"; // Por defecto es Adulto
@@ -42,11 +42,9 @@ class _AddUserPageState extends State<AddUserPage> {
   @override
   void initState() {
     super.initState();
-    authController.initializeAdmin();
     _loadFamilies();
     // Generar nombre de usuario y contraseña inicial
     _generateCredentials();
-
   }
 
   @override
@@ -138,34 +136,39 @@ class _AddUserPageState extends State<AddUserPage> {
   Future<void> _saveUserToFirebase() async {
     if (_nameController.text.isEmpty || _emailController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El nombre y correo electrónico son obligatorios')),
+        const SnackBar(
+          content: Text('El nombre y correo electrónico son obligatorios'),
+        ),
+      );
+      return;
+    }
+
+    // Pide la contraseña del admin antes de crear el usuario
+    final adminPassword = await _askAdminPassword(context);
+    if (adminPassword == null || adminPassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debes ingresar tu contraseña para continuar')),
       );
       return;
     }
 
     try {
-      // Envolver la operación de guardado en Obx para mantener estado del admin
-      Obx(() {
-        if (authController.adminUser == null) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return Container(); // Widget vacío cuando el admin está disponible
-      });
-
       String familyId;
       if (_createNewFamily && _newFamilyNameController.text.isNotEmpty) {
         DocumentReference familyRef = await FirebaseFirestore.instance
             .collection('familias')
             .add({
-          'nombre': _newFamilyNameController.text.trim(),
-          'fechaCreacion': DateTime.now().toString(),
-        });
+              'nombre': _newFamilyNameController.text.trim(),
+              'fechaCreacion': DateTime.now().toString(),
+            });
         familyId = familyRef.id;
       } else if (!_createNewFamily && _selectedFamilyId != null) {
         familyId = _selectedFamilyId!;
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Es necesario seleccionar o crear una familia')),
+          const SnackBar(
+            content: Text('Es necesario seleccionar o crear una familia'),
+          ),
         );
         return;
       }
@@ -181,19 +184,18 @@ class _AddUserPageState extends State<AddUserPage> {
         'rol': _userType,
         'familiaId': familyId,
         'fechaRegistro': DateTime.now().toString(),
+        'isAdmin': false,
       };
 
-      // Registrar usuario usando FirebaseController
-      final result = await UserController.registerUser(
+      // Llama al método del controlador pasando la contraseña del admin
+      final result = await UserController.registerNewUser(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
         userData: userData,
+        adminPassword: adminPassword, // Nuevo parámetro
       );
 
       if (result['success']) {
-        // Actualizar el estado del admin después de la operación
-        await authController.initializeAdmin();
-        
         _showSuccessDialog(context);
         _clearFields();
       } else {
@@ -204,6 +206,43 @@ class _AddUserPageState extends State<AddUserPage> {
         SnackBar(content: Text('Error al guardar: $e')),
       );
     }
+  }
+
+  Future<String?> _askAdminPassword(BuildContext context) async {
+    final TextEditingController _passwordDialogController = TextEditingController();
+    String? password;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirma tu contraseña'),
+          content: TextField(
+            controller: _passwordDialogController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Contraseña de administrador',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                password = _passwordDialogController.text;
+                Navigator.of(context).pop();
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+    return password;
   }
 
   // Método para mostrar el selector de fecha
@@ -865,33 +904,40 @@ class _AddUserPageState extends State<AddUserPage> {
   void _showSuccessDialog(BuildContext context) {
     showDialog(
       context: context,
+      barrierDismissible: false, // El usuario debe usar el botón para cerrar
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Usuario guardado'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('El usuario ha sido registrado exitosamente.'),
-              const SizedBox(height: 12),
-              Text('Nombre de usuario: ${_usernameController.text}'),
-              Text('Contraseña: ${_passwordController.text}'),
-              const SizedBox(height: 8),
-              const Text(
-                'Recuerde compartir estas credenciales con el usuario.',
-                style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
-              ),
-            ],
+          title: const Text('Usuario registrado exitosamente'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('El usuario ha sido registrado con éxito.'),
+                const SizedBox(height: 16),
+                const Text('Credenciales de acceso:', 
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                SelectableText('Usuario: ${_usernameController.text}',
+                  style: const TextStyle(fontFamily: 'monospace')),
+                SelectableText('Contraseña: ${_passwordController.text}',
+                  style: const TextStyle(fontFamily: 'monospace')),
+                const SizedBox(height: 16),
+                const Text('⚠️ IMPORTANTE:',
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Guarde o comparta estas credenciales de forma segura. '
+                  'No podrá verlas nuevamente.',
+                  style: TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text(
-                'OK',
-                style: TextStyle(color: Color(0xFF03d069)),
-              ),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('ENTENDIDO',
+                style: TextStyle(color: Color(0xFF03d069))),
             ),
           ],
         );
