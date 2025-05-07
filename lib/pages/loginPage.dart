@@ -232,6 +232,13 @@ class _LoginPageState extends State<LoginPage> {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setBool('is_admin', roleInfo['isAdmin'] ?? false);
 
+          // Guardar el nombre del usuario
+          if (roleInfo['userData'] != null) {
+            // Guardar el nombre del usuario en SharedPreferences
+            final String userName = roleInfo['userData']['nombre'] ?? 'Usuario';
+            await prefs.setString('user_name', userName);
+          }
+
           setState(() {
             _isLoading = false;
           });

@@ -2,6 +2,7 @@ import 'package:bymax/controllers/loginController.dart';
 import 'package:bymax/pages/activitiesPage.dart';
 import 'package:bymax/pages/recordatoryPage.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class homePage extends StatefulWidget {
   const homePage({super.key});
@@ -14,6 +15,29 @@ class _homePageState extends State<homePage> {
   int _selectedIndex = 0;
   // Controlador para el scrollbar
   final ScrollController _scrollController = ScrollController();
+  // Variable para almacenar el nombre del usuario
+  String _userName = "Usuario";
+
+  @override
+  void initState() {
+    super.initState();
+    // Cargar el nombre del usuario cuando se inicia la pantalla
+    _loadUserName();
+  }
+
+  // Método para cargar el nombre del usuario desde SharedPreferences
+  Future<void> _loadUserName() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedName = prefs.getString('user_name');
+
+      setState(() {
+        _userName = savedName ?? "Usuario";
+      });
+    } catch (e) {
+      print('Error al cargar el nombre del usuario: $e');
+    }
+  }
 
   @override
   void dispose() {
@@ -157,9 +181,9 @@ class _homePageState extends State<homePage> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Hola Aministrador',
-                            style: TextStyle(
+                          Text(
+                            'Hola $_userName',
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.w500,

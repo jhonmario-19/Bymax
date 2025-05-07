@@ -36,7 +36,7 @@ class _UserListPageState extends State<UserListPage> {
 
   Future<void> _loadUsuariosYFamilias() async {
     if (!mounted) return;
-    
+
     setState(() {
       _isLoading = true;
       _errorMessage = '';
@@ -51,29 +51,30 @@ class _UserListPageState extends State<UserListPage> {
           _errorMessage = 'No tienes permisos de administrador';
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No tienes permisos de administrador'))
+          const SnackBar(content: Text('No tienes permisos de administrador')),
         );
         Future.delayed(const Duration(seconds: 2), () {
           Navigator.pushReplacementNamed(context, '/homePage');
         });
         return;
       }
-      
+
       // Usamos directamente el método del controlador
       final result = await _controller.loadUsersAndFamilies();
-      
+
       if (!mounted) return;
-      
+
       if (result['success']) {
         setState(() {
           _usuarios = List<Map<String, dynamic>>.from(result['usuarios']);
           _familias = Map<String, String>.from(result['familias']);
           _isLoading = false;
-          
+
           // Mostrar información de depuración
           print("Usuarios cargados: ${_usuarios.length}");
           if (_usuarios.isEmpty) {
-            _errorMessage = 'No se encontraron usuarios creados por este administrador';
+            _errorMessage =
+                'No se encontraron usuarios creados por este administrador';
           }
         });
       } else {
@@ -89,9 +90,9 @@ class _UserListPageState extends State<UserListPage> {
         _isLoading = false;
         _errorMessage = e.toString();
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al cargar usuarios: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error al cargar usuarios: $e')));
       // Redirigir al home si no hay permisos
       if (e.toString().contains("No tienes permisos")) {
         Future.delayed(const Duration(seconds: 2), () {
@@ -101,43 +102,68 @@ class _UserListPageState extends State<UserListPage> {
     }
   }
 
-  // Método para filtrar usuarios por rol
+  // Método para filtrar usuarios por rol (case-insensitive)
   List<Map<String, dynamic>> _getFilteredUsers() {
-    return _controller.filterUsersByRole(_usuarios, _filterRole);
+    if (_filterRole == 'Todos') {
+      return _usuarios;
+    }
+
+    // Filtrar usuarios de manera insensible a mayúsculas/minúsculas
+    final lowerCaseFilter = _filterRole.toLowerCase();
+    return _usuarios.where((usuario) {
+      final userRole = usuario['rol']?.toString().toLowerCase() ?? '';
+      return userRole == lowerCaseFilter;
+    }).toList();
   }
 
   // Función para mostrar información del usuario en una tarjeta más detallada
   void _showUserDetails(Map<String, dynamic> usuario) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(usuario['nombre'] ?? 'Sin nombre'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('ID: ${usuario['id']}'),
-              Text('Email: ${usuario['email'] ?? 'No disponible'}'),
-              Text('Rol: ${usuario['rol'] ?? 'No definido'}'),
-              Text('Familia: ${_controller.getFamilyName(_familias, usuario['familiaId'])}'),
-              Text('Creado por: ${usuario['createdBy'] ?? 'No definido'}'),
-              // Mostrar todos los campos disponibles
-              const SizedBox(height: 16),
-              const Text('Información adicional:', style: TextStyle(fontWeight: FontWeight.bold)),
-              ...usuario.entries
-                  .where((entry) => !['id', 'email', 'rol', 'familiaId', 'createdBy', 'nombre'].contains(entry.key))
-                  .map((entry) => Text('${entry.key}: ${entry.value}')),
+      builder:
+          (context) => AlertDialog(
+            title: Text(usuario['nombre'] ?? 'Sin nombre'),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('ID: ${usuario['id']}'),
+                  Text('Email: ${usuario['email'] ?? 'No disponible'}'),
+                  Text('Rol: ${usuario['rol'] ?? 'No definido'}'),
+                  Text(
+                    'Familia: ${_controller.getFamilyName(_familias, usuario['familiaId'])}',
+                  ),
+                  Text('Creado por: ${usuario['createdBy'] ?? 'No definido'}'),
+                  // Mostrar todos los campos disponibles
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Información adicional:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  ...usuario.entries
+                      .where(
+                        (entry) =>
+                            ![
+                              'id',
+                              'email',
+                              'rol',
+                              'familiaId',
+                              'createdBy',
+                              'nombre',
+                            ].contains(entry.key),
+                      )
+                      .map((entry) => Text('${entry.key}: ${entry.value}')),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -306,51 +332,52 @@ class _UserListPageState extends State<UserListPage> {
                     ),
                     // Lista de usuarios
                     Expanded(
-                      child: _isLoading
-                          ? const Center(
-                              child: CircularProgressIndicator(
-                                color: Color(0xFF03d069),
-                              ),
-                            )
-                          : filteredUsers.isEmpty
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Text(
-                                        'No hay usuarios para mostrar',
-                                        style: TextStyle(fontSize: 16),
-                                      ),
-                                      if (_errorMessage.isNotEmpty)
-                                        Padding(
-                                          padding: const EdgeInsets.all(16),
-                                          child: Text(
-                                            'Detalle: $_errorMessage',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.red,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                )
-                              : Scrollbar(
-                                  controller: _scrollController,
-                                  thumbVisibility: true,
-                                  thickness: 6,
-                                  radius: const Radius.circular(10),
-                                  child: ListView.builder(
-                                    controller: _scrollController,
-                                    padding: const EdgeInsets.all(16),
-                                    itemCount: filteredUsers.length,
-                                    itemBuilder: (context, index) {
-                                      final usuario = filteredUsers[index];
-                                      return _buildUsuarioCard(usuario);
-                                    },
-                                  ),
+                      child:
+                          _isLoading
+                              ? const Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFF03d069),
                                 ),
+                              )
+                              : filteredUsers.isEmpty
+                              ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Text(
+                                      'No hay usuarios para mostrar',
+                                      style: TextStyle(fontSize: 16),
+                                    ),
+                                    if (_errorMessage.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Text(
+                                          'Detalle: $_errorMessage',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.red,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              )
+                              : Scrollbar(
+                                controller: _scrollController,
+                                thumbVisibility: true,
+                                thickness: 6,
+                                radius: const Radius.circular(10),
+                                child: ListView.builder(
+                                  controller: _scrollController,
+                                  padding: const EdgeInsets.all(16),
+                                  itemCount: filteredUsers.length,
+                                  itemBuilder: (context, index) {
+                                    final usuario = filteredUsers[index];
+                                    return _buildUsuarioCard(usuario);
+                                  },
+                                ),
+                              ),
                     ),
                   ],
                 ),
@@ -364,7 +391,10 @@ class _UserListPageState extends State<UserListPage> {
 
   // Widget para las tarjetas de usuario
   Widget _buildUsuarioCard(Map<String, dynamic> usuario) {
-    final familyName = _controller.getFamilyName(_familias, usuario['familiaId']);
+    final familyName = _controller.getFamilyName(
+      _familias,
+      usuario['familiaId'],
+    );
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -378,7 +408,10 @@ class _UserListPageState extends State<UserListPage> {
             children: [
               Text(
                 usuario['nombre'] ?? 'Sin nombre',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 4),
               Text('Email: ${usuario['email'] ?? 'No disponible'}'),
@@ -389,9 +422,11 @@ class _UserListPageState extends State<UserListPage> {
                 'Creado por: ${usuario['createdBy'] != null ? (usuario['createdBy'] == UserController.auth.currentUser?.uid ? 'Tí' : 'Otro admin') : 'Desconocido'}',
                 style: TextStyle(
                   fontSize: 12,
-                  color: usuario['createdBy'] == UserController.auth.currentUser?.uid 
-                      ? Colors.green 
-                      : Colors.grey,
+                  color:
+                      usuario['createdBy'] ==
+                              UserController.auth.currentUser?.uid
+                          ? Colors.green
+                          : Colors.grey,
                 ),
               ),
             ],
@@ -458,7 +493,8 @@ class _UserListPageState extends State<UserListPage> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(result['message']),
-                    backgroundColor: result['success'] ? Colors.green : Colors.red,
+                    backgroundColor:
+                        result['success'] ? Colors.green : Colors.red,
                   ),
                 );
 

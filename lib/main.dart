@@ -13,10 +13,10 @@ import 'package:bymax/pages/activitiesPage.dart'; // Si deseas también usarla
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+
   // Inicializar el controlador de autenticación
   Get.put(AuthStateController());
-  
+
   runApp(const MyApp());
 }
 

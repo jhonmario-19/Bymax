@@ -47,10 +47,8 @@ class UserController {
       final adminEmail = currentUser.email;
 
       // Crear el usuario (esto cambia la sesión)
-      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      UserCredential userCredential = await _auth
+          .createUserWithEmailAndPassword(email: email, password: password);
 
       final Map<String, dynamic> finalUserData = {
         ...userData,
@@ -74,10 +72,7 @@ class UserController {
         );
       }
 
-      return {
-        'success': true,
-        'usuario': finalUserData,
-      };
+      return {'success': true, 'usuario': finalUserData};
     } catch (e) {
       print("Error al registrar nuevo usuario: $e");
       return {'success': false, 'message': 'Error al registrar usuario: $e'};
@@ -109,16 +104,24 @@ class UserController {
     }
   }
 
-  // Método para crear una nueva familia
-  static Future<String> createFamily(String familyName) async {
+  // Método para crear una nueva familia e incluir al usuario como miembro
+  static Future<String> createFamily(String familyName, String userId) async {
     try {
       DocumentReference familyRef = await _firestore.collection('familias').add(
         {
           'nombre': familyName,
           'fechaCreacion': DateTime.now().toString(),
-          'miembros': [], // Inicializa la familia sin miembros
+          'miembros': [
+            userId,
+          ], // Inicializa la familia con el usuario como miembro
         },
       );
+
+      // Actualizar el documento del usuario para asociarlo con esta familia
+      await _firestore.collection('usuarios').doc(userId).update({
+        'familiaId': familyRef.id,
+      });
+
       return familyRef.id;
     } catch (e) {
       print("Error al crear familia: $e");
@@ -220,11 +223,15 @@ class UserController {
     }
   }
 
-  // Método para obtener todas las familias
-  static Future<Map<String, String>> getFamilies() async {
+  static Future<Map<String, String>> getFamiliesCreatedByAdmin(
+    String adminId,
+  ) async {
     try {
       QuerySnapshot querySnapshot =
-          await _firestore.collection('familias').get();
+          await _firestore
+              .collection('familias')
+              .where('createdBy', isEqualTo: adminId) // Filtrar por el creador
+              .get();
 
       Map<String, String> families = {};
       for (var doc in querySnapshot.docs) {
@@ -233,8 +240,8 @@ class UserController {
 
       return families;
     } catch (e) {
-      print("Error al obtener familias: $e");
-      throw Exception("Error al obtener familias");
+      print("Error al obtener familias creadas por el administrador: $e");
+      throw Exception("Error al obtener familias creadas por el administrador");
     }
   }
 

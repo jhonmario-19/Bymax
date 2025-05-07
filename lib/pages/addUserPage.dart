@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import '../controllers/userController.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -25,68 +27,65 @@ class _AddUserPageState extends State<AddUserPage> {
   final _passwordController =
       TextEditingController(); // Para mostrar la contraseña generada
 
-  // Variable para el tipo de usuario
-  String _userType = "Adulto"; // Por defecto es Adulto
-
   // Variables para la familia
   bool _createNewFamily = false; // Por defecto, no crear nueva familia
   String? _selectedFamilyId;
   String _newFamilyName = "";
   final _newFamilyNameController = TextEditingController();
-  List<Map<String, dynamic>> _families = [];
-  bool _isLoadingFamilies = true;
 
-  // Añadimos el controlador para el scrollbar
+  // Variables para el formulario
+  String _userType = "Adulto";
+  Map<String, String> _families = {};
+  bool _isLoadingFamilies = true;
+  bool _isSaving = false;
+
+  // Scroll controller for the Scrollbar
   final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadFamilies();
-    // Generar nombre de usuario y contraseña inicial
     _generateCredentials();
   }
 
   @override
   void dispose() {
-    // Limpiamos los controladores cuando se destruye el widget
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
     _birthDateController.dispose();
     _idNumberController.dispose();
-    _usernameController.dispose();
+    _scrollController.dispose(); // Dispose the scroll controller
+    super.dispose();
     _passwordController.dispose();
     _newFamilyNameController.dispose();
-    _scrollController.dispose(); // Importante liberar el controlador del scroll
     super.dispose();
   }
 
-  // Método para cargar las familias desde Firestore
   Future<void> _loadFamilies() async {
     setState(() {
       _isLoadingFamilies = true;
     });
 
     try {
-      QuerySnapshot familiesSnapshot =
-          await FirebaseFirestore.instance.collection('familias').get();
-
-      List<Map<String, dynamic>> loadedFamilies = [];
-      for (var doc in familiesSnapshot.docs) {
-        loadedFamilies.add({
-          'id': doc.id,
-          'nombre': doc['nombre'] ?? 'Sin nombre',
-        });
+      // Obtener el ID del administrador actual
+      final currentUser = UserController.auth.currentUser;
+      if (currentUser == null) {
+        throw Exception("No se encontró al usuario actual.");
       }
 
+      // Obtener las familias creadas por el administrador actual
+      final families = await UserController.getFamiliesCreatedByAdmin(
+        currentUser.uid,
+      );
+
       setState(() {
-        _families = loadedFamilies;
+        _families = families;
         _isLoadingFamilies = false;
-        // Si hay familias, seleccionamos la primera por defecto
         if (_families.isNotEmpty) {
-          _selectedFamilyId = _families[0]['id'];
+          _selectedFamilyId = _families.keys.first;
         }
       });
     } catch (e) {
@@ -99,41 +98,17 @@ class _AddUserPageState extends State<AddUserPage> {
     }
   }
 
-  // Método para generar nombre de usuario y contraseña
   void _generateCredentials() {
-    // Generar un nombre de usuario basado en el nombre completo si está disponible
-    if (_nameController.text.isNotEmpty) {
-      String fullName = _nameController.text.trim();
-      List<String> nameParts = fullName.split(' ');
+    // Generate unique username
+    _usernameController.text =
+        'user${DateTime.now().millisecondsSinceEpoch % 10000}';
 
-      // Tomar primera letra del nombre y apellido completo
-      String username = '';
-      if (nameParts.isNotEmpty) {
-        username = nameParts[0].toLowerCase();
-        if (nameParts.length > 1) {
-          // Añadir primera letra del apellido
-          username += nameParts.last[0].toLowerCase();
-        }
-        // Añadir números aleatorios para hacerlo único
-        username += '${DateTime.now().millisecondsSinceEpoch % 1000}';
-      } else {
-        username = 'user${DateTime.now().millisecondsSinceEpoch % 10000}';
-      }
-
-      _usernameController.text = username;
-    } else {
-      // Si no hay nombre, generar uno aleatorio
-      _usernameController.text =
-          'user${DateTime.now().millisecondsSinceEpoch % 10000}';
-    }
-
-    // Generar una contraseña aleatoria
-    String password = 'Pass${DateTime.now().millisecondsSinceEpoch % 10000}!';
-    _passwordController.text = password;
+    // Use the password generator from UserController
+    _passwordController.text = UserController.generatePassword();
   }
 
-  // Método para registrar usuario en Firebase
   Future<void> _saveUserToFirebase() async {
+    // Validar campos obligatorios
     if (_nameController.text.isEmpty || _emailController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -143,23 +118,36 @@ class _AddUserPageState extends State<AddUserPage> {
       return;
     }
 
+    // Iniciar estado de carga
+    setState(() {
+      _isSaving = true;
+    });
+
     // Pide la contraseña del admin antes de crear el usuario
     final adminPassword = await _askAdminPassword(context);
     if (adminPassword == null || adminPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Debes ingresar tu contraseña para continuar')),
+        const SnackBar(
+          content: Text('Debes ingresar tu contraseña para continuar'),
+        ),
       );
+      setState(() {
+        _isSaving = false;
+      });
       return;
     }
 
     try {
       String familyId;
+      // Maneja la creación o selección de familia
       if (_createNewFamily && _newFamilyNameController.text.isNotEmpty) {
+        // Crear nueva familia con el campo createdBy
         DocumentReference familyRef = await FirebaseFirestore.instance
             .collection('familias')
             .add({
               'nombre': _newFamilyNameController.text.trim(),
               'fechaCreacion': DateTime.now().toString(),
+              'createdBy': UserController.auth.currentUser!.uid,
             });
         familyId = familyRef.id;
       } else if (!_createNewFamily && _selectedFamilyId != null) {
@@ -170,9 +158,23 @@ class _AddUserPageState extends State<AddUserPage> {
             content: Text('Es necesario seleccionar o crear una familia'),
           ),
         );
+        setState(() {
+          _isSaving = false;
+        });
         return;
       }
 
+      // Verificar si el nombre de usuario es único
+      bool isUnique = await UserController.isUsernameUnique(
+        _usernameController.text.trim(),
+      );
+      if (!isUnique) {
+        // Generar un nuevo nombre de usuario si el actual no es único
+        _usernameController.text =
+            'user${DateTime.now().millisecondsSinceEpoch}';
+      }
+
+      // Preparar datos del usuario
       Map<String, dynamic> userData = {
         'nombre': _nameController.text.trim(),
         'email': _emailController.text.trim(),
@@ -181,35 +183,50 @@ class _AddUserPageState extends State<AddUserPage> {
         'fechaNacimiento': _birthDateController.text.trim(),
         'numeroIdentificacion': _idNumberController.text.trim(),
         'username': _usernameController.text.trim(),
-        'rol': _userType,
+        'rol': _userType, // Mantener el rol del usuario
         'familiaId': familyId,
         'fechaRegistro': DateTime.now().toString(),
         'isAdmin': false,
       };
 
-      // Llama al método del controlador pasando la contraseña del admin
+      // Registrar nuevo usuario
       final result = await UserController.registerNewUser(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
         userData: userData,
-        adminPassword: adminPassword, // Nuevo parámetro
+        adminPassword: adminPassword,
       );
 
       if (result['success']) {
+        // Obtener el ID del usuario recién creado
+        String newUserId = result['usuario']['uid'];
+
+        // Añadir explícitamente el usuario a la familia
+        await UserController.addUserToFamily(familyId, newUserId);
+
         _showSuccessDialog(context);
         _clearFields();
+
+        // Actualizar la lista de familias
+        _loadFamilies();
       } else {
         throw Exception(result['message']);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error al guardar: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
+    } finally {
+      // Finalizar estado de carga
+      setState(() {
+        _isSaving = false;
+      });
     }
   }
 
   Future<String?> _askAdminPassword(BuildContext context) async {
-    final TextEditingController _passwordDialogController = TextEditingController();
+    final TextEditingController _passwordDialogController =
+        TextEditingController();
     String? password;
     await showDialog(
       context: context,
@@ -274,14 +291,15 @@ class _AddUserPageState extends State<AddUserPage> {
     );
 
     if (pickedDate != null) {
+      // Formatea la fecha como DD/MM/YYYY
+      String formattedDate =
+          "${pickedDate.day.toString().padLeft(2, '0')}/${pickedDate.month.toString().padLeft(2, '0')}/${pickedDate.year}";
       setState(() {
-        _birthDateController.text =
-            "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
+        _birthDateController.text = formattedDate;
       });
     }
   }
 
-  // Método para limpiar los campos del formulario
   void _clearFields() {
     _nameController.clear();
     _emailController.clear();
@@ -296,14 +314,69 @@ class _AddUserPageState extends State<AddUserPage> {
       _userType = "Adulto";
       _createNewFamily = false;
       if (_families.isNotEmpty) {
-        _selectedFamilyId = _families[0]['id'];
+        _selectedFamilyId = _families.keys.first;
       } else {
         _selectedFamilyId = null;
       }
     });
-
-    // Generar nuevas credenciales
     _generateCredentials();
+  }
+
+  void _showSuccessDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // El usuario debe usar el botón para cerrar
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Usuario registrado exitosamente'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('El usuario ha sido registrado con éxito.'),
+                const SizedBox(height: 16),
+                const Text(
+                  'Credenciales de acceso:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                SelectableText(
+                  'Usuario: ${_usernameController.text}',
+                  style: const TextStyle(fontFamily: 'monospace'),
+                ),
+                SelectableText(
+                  'Contraseña: ${_passwordController.text}',
+                  style: const TextStyle(fontFamily: 'monospace'),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '⚠️ IMPORTANTE:',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Text(
+                  'Guarde o comparta estas credenciales de forma segura. '
+                  'No podrá verlas nuevamente.',
+                  style: TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'ENTENDIDO',
+                style: TextStyle(color: Color(0xFF03d069)),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -600,10 +673,10 @@ class _AddUserPageState extends State<AddUserPage> {
                                     ),
                                   ),
                                   items:
-                                      _families.map((family) {
+                                      _families.entries.map((family) {
                                         return DropdownMenuItem<String>(
-                                          value: family['id'],
-                                          child: Text(family['nombre']),
+                                          value: family.key,
+                                          child: Text(family.value),
                                         );
                                       }).toList(),
                                   onChanged: (String? newValue) {
@@ -897,51 +970,6 @@ class _AddUserPageState extends State<AddUserPage> {
           size: 24,
         ),
       ),
-    );
-  }
-
-  // Diálogo de éxito al guardar
-  void _showSuccessDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false, // El usuario debe usar el botón para cerrar
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Usuario registrado exitosamente'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('El usuario ha sido registrado con éxito.'),
-                const SizedBox(height: 16),
-                const Text('Credenciales de acceso:', 
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                SelectableText('Usuario: ${_usernameController.text}',
-                  style: const TextStyle(fontFamily: 'monospace')),
-                SelectableText('Contraseña: ${_passwordController.text}',
-                  style: const TextStyle(fontFamily: 'monospace')),
-                const SizedBox(height: 16),
-                const Text('⚠️ IMPORTANTE:',
-                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                const Text(
-                  'Guarde o comparta estas credenciales de forma segura. '
-                  'No podrá verlas nuevamente.',
-                  style: TextStyle(fontStyle: FontStyle.italic),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('ENTENDIDO',
-                style: TextStyle(color: Color(0xFF03d069))),
-            ),
-          ],
-        );
-      },
     );
   }
 }
