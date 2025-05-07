@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
-import '../controllers/authStateController.dart';
-import '../controllers/userController.dart'; // Add this import
-import 'widgets/family_options.dart';
-import 'widgets/custom_navigation_bar.dart';
-import 'widgets/user_form.dart';
+import '../controllers/userController.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
@@ -14,7 +10,8 @@ class AddUserPage extends StatefulWidget {
 }
 
 class _AddUserPageState extends State<AddUserPage> {
-  final AuthStateController authController = Get.find<AuthStateController>();
+  int _selectedIndex =
+      1; // Por defecto seleccionamos la opción de agregar (índice 1)
 
   // Controladores para los campos de texto
   final _nameController = TextEditingController();
@@ -23,27 +20,36 @@ class _AddUserPageState extends State<AddUserPage> {
   final _addressController = TextEditingController();
   final _birthDateController = TextEditingController();
   final _idNumberController = TextEditingController();
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _newFamilyNameController = TextEditingController();
+  final _usernameController =
+      TextEditingController(); // Para mostrar el username generado
+  final _passwordController =
+      TextEditingController(); // Para mostrar la contraseña generada
 
-  // Variables para el formulario
-  String _userType = "Adulto";
-  bool _createNewFamily = false;
+  // Variable para el tipo de usuario
+  String _userType = "Adulto"; // Por defecto es Adulto
+
+  // Variables para la familia
+  bool _createNewFamily = false; // Por defecto, no crear nueva familia
   String? _selectedFamilyId;
-  Map<String, String> _families = {};
+  String _newFamilyName = "";
+  final _newFamilyNameController = TextEditingController();
+  List<Map<String, dynamic>> _families = [];
   bool _isLoadingFamilies = true;
-  bool _isSaving = false;
+
+  // Añadimos el controlador para el scrollbar
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadFamilies();
+    // Generar nombre de usuario y contraseña inicial
     _generateCredentials();
   }
 
   @override
   void dispose() {
+    // Limpiamos los controladores cuando se destruye el widget
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
@@ -53,23 +59,34 @@ class _AddUserPageState extends State<AddUserPage> {
     _usernameController.dispose();
     _passwordController.dispose();
     _newFamilyNameController.dispose();
+    _scrollController.dispose(); // Importante liberar el controlador del scroll
     super.dispose();
   }
 
+  // Método para cargar las familias desde Firestore
   Future<void> _loadFamilies() async {
     setState(() {
       _isLoadingFamilies = true;
     });
 
     try {
-      // Use the actual method from UserController
-      final families = await UserController.getFamilies();
+      QuerySnapshot familiesSnapshot =
+          await FirebaseFirestore.instance.collection('familias').get();
+
+      List<Map<String, dynamic>> loadedFamilies = [];
+      for (var doc in familiesSnapshot.docs) {
+        loadedFamilies.add({
+          'id': doc.id,
+          'nombre': doc['nombre'] ?? 'Sin nombre',
+        });
+      }
 
       setState(() {
-        _families = families;
+        _families = loadedFamilies;
         _isLoadingFamilies = false;
+        // Si hay familias, seleccionamos la primera por defecto
         if (_families.isNotEmpty) {
-          _selectedFamilyId = _families.keys.first;
+          _selectedFamilyId = _families[0]['id'];
         }
       });
     } catch (e) {
@@ -82,15 +99,40 @@ class _AddUserPageState extends State<AddUserPage> {
     }
   }
 
+  // Método para generar nombre de usuario y contraseña
   void _generateCredentials() {
-    // Generate unique username
-    _usernameController.text =
-        'user${DateTime.now().millisecondsSinceEpoch % 10000}';
+    // Generar un nombre de usuario basado en el nombre completo si está disponible
+    if (_nameController.text.isNotEmpty) {
+      String fullName = _nameController.text.trim();
+      List<String> nameParts = fullName.split(' ');
 
-    // Use the password generator from UserController
-    _passwordController.text = UserController.generatePassword();
+      // Tomar primera letra del nombre y apellido completo
+      String username = '';
+      if (nameParts.isNotEmpty) {
+        username = nameParts[0].toLowerCase();
+        if (nameParts.length > 1) {
+          // Añadir primera letra del apellido
+          username += nameParts.last[0].toLowerCase();
+        }
+        // Añadir números aleatorios para hacerlo único
+        username += '${DateTime.now().millisecondsSinceEpoch % 1000}';
+      } else {
+        username = 'user${DateTime.now().millisecondsSinceEpoch % 10000}';
+      }
+
+      _usernameController.text = username;
+    } else {
+      // Si no hay nombre, generar uno aleatorio
+      _usernameController.text =
+          'user${DateTime.now().millisecondsSinceEpoch % 10000}';
+    }
+
+    // Generar una contraseña aleatoria
+    String password = 'Pass${DateTime.now().millisecondsSinceEpoch % 10000}!';
+    _passwordController.text = password;
   }
 
+  // Método para registrar usuario en Firebase
   Future<void> _saveUserToFirebase() async {
     if (_nameController.text.isEmpty || _emailController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -101,88 +143,145 @@ class _AddUserPageState extends State<AddUserPage> {
       return;
     }
 
-    setState(() {
-      _isSaving = true;
-    });
+    // Pide la contraseña del admin antes de crear el usuario
+    final adminPassword = await _askAdminPassword(context);
+    if (adminPassword == null || adminPassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Debes ingresar tu contraseña para continuar')),
+      );
+      return;
+    }
 
     try {
-      String? familyId;
-
-      // Handle family creation or selection
+      String familyId;
       if (_createNewFamily && _newFamilyNameController.text.isNotEmpty) {
-        // Create a new family and get its ID
-        familyId = await UserController.createFamily(
-          _newFamilyNameController.text,
-        );
+        DocumentReference familyRef = await FirebaseFirestore.instance
+            .collection('familias')
+            .add({
+              'nombre': _newFamilyNameController.text.trim(),
+              'fechaCreacion': DateTime.now().toString(),
+            });
+        familyId = familyRef.id;
       } else if (!_createNewFamily && _selectedFamilyId != null) {
-        familyId = _selectedFamilyId;
+        familyId = _selectedFamilyId!;
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Es necesario seleccionar o crear una familia'),
           ),
         );
-        setState(() {
-          _isSaving = false;
-        });
         return;
       }
 
-      // Verify username uniqueness
-      bool isUnique = await UserController.isUsernameUnique(
-        _usernameController.text,
-      );
-      if (!isUnique) {
-        // Generate a new username if the current one is not unique
-        _usernameController.text =
-            'user${DateTime.now().millisecondsSinceEpoch}';
-      }
-
-      // Prepare user data
       Map<String, dynamic> userData = {
-        'nombre': _nameController.text,
-        'email': _emailController.text,
-        'telefono': _phoneController.text,
-        'direccion': _addressController.text,
-        'fechaNacimiento': _birthDateController.text,
-        'numeroIdentificacion': _idNumberController.text,
-        'username': _usernameController.text,
+        'nombre': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'telefono': _phoneController.text.trim(),
+        'direccion': _addressController.text.trim(),
+        'fechaNacimiento': _birthDateController.text.trim(),
+        'numeroIdentificacion': _idNumberController.text.trim(),
+        'username': _usernameController.text.trim(),
+        'rol': _userType,
         'familiaId': familyId,
-        'rol': _userType.toLowerCase(), // Convert to lowercase for consistency
-        'fechaCreacion': DateTime.now().toString(),
+        'fechaRegistro': DateTime.now().toString(),
+        'isAdmin': false,
       };
 
-      // Register the user using UserController
-      final result = await UserController.registerUser(
-        email: _emailController.text,
-        password: _passwordController.text,
+      // Llama al método del controlador pasando la contraseña del admin
+      final result = await UserController.registerNewUser(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
         userData: userData,
+        adminPassword: adminPassword, // Nuevo parámetro
       );
-
-      setState(() {
-        _isSaving = false;
-      });
 
       if (result['success']) {
         _showSuccessDialog(context);
         _clearFields();
-        // Refresh the families list
-        _loadFamilies();
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${result['message']}')));
+        throw Exception(result['message']);
       }
     } catch (e) {
-      setState(() {
-        _isSaving = false;
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al guardar: $e')),
+      );
     }
   }
 
+  Future<String?> _askAdminPassword(BuildContext context) async {
+    final TextEditingController _passwordDialogController = TextEditingController();
+    String? password;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirma tu contraseña'),
+          content: TextField(
+            controller: _passwordDialogController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Contraseña de administrador',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                password = _passwordDialogController.text;
+                Navigator.of(context).pop();
+              },
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+    return password;
+  }
+
+  // Método para mostrar el selector de fecha
+  Future<void> _selectBirthDate(BuildContext context) async {
+    DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(), // Fecha inicial del calendario
+      firstDate: DateTime(1900), // Fecha mínima seleccionable
+      lastDate: DateTime.now(), // Fecha máxima seleccionable
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF03d069), // Color del encabezado del calendario
+              onPrimary: Colors.white, // Color del texto en el encabezado
+              onSurface: Colors.black, // Color del texto en el calendario
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(
+                  0xFF03d069,
+                ), // Color del botón "OK"
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate != null) {
+      setState(() {
+        _birthDateController.text =
+            "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
+      });
+    }
+  }
+
+  // Método para limpiar los campos del formulario
   void _clearFields() {
     _nameController.clear();
     _emailController.clear();
@@ -197,189 +296,521 @@ class _AddUserPageState extends State<AddUserPage> {
       _userType = "Adulto";
       _createNewFamily = false;
       if (_families.isNotEmpty) {
-        _selectedFamilyId = _families.keys.first;
+        _selectedFamilyId = _families[0]['id'];
       } else {
         _selectedFamilyId = null;
       }
     });
-    _generateCredentials();
-  }
 
-  void _showSuccessDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Usuario guardado'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('El usuario ha sido registrado exitosamente.'),
-              const SizedBox(height: 12),
-              Text('Nombre de usuario: ${_usernameController.text}'),
-              Text('Contraseña: ${_passwordController.text}'),
-              const SizedBox(height: 8),
-              const Text(
-                'Recuerde compartir estas credenciales con el usuario.',
-                style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text(
-                'OK',
-                style: TextStyle(color: Color(0xFF03d069)),
-              ),
-            ),
-          ],
-        );
-      },
-    );
+    // Generar nuevas credenciales
+    _generateCredentials();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      bottomNavigationBar: CustomNavigationBar(
-        selectedIndex: 1,
-        onItemSelected: (index) {
-          switch (index) {
-            case 0:
-              Navigator.pushReplacementNamed(context, '/homePage');
-              break;
-            case 1:
-              break; // Ya estamos en esta página
-            case 2:
-              Navigator.pushReplacementNamed(context, '/settings');
-              break;
-            case 3:
-              // Log out and navigate to login page
-              UserController.signOut().then((_) {
-                Navigator.pushReplacementNamed(context, '/loginPage');
-              });
-              break;
-          }
-        },
+      // Barra de navegación inferior fuera del SafeArea
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(color: const Color(0xFF03d069)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildNavBarItem(Icons.home, 0),
+            _buildNavBarItem(Icons.add, 1),
+            _buildNavBarItem(Icons.settings, 2),
+            _buildNavBarItem(Icons.logout, 3),
+          ],
+        ),
       ),
-      body:
-          _isSaving
-              ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFF03d069)),
-              )
-              : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Agregar Usuario',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+      body: Container(
+        width: double.infinity,
+        color: const Color(0xFF03d069), // Color verde de fondo
+        child: Column(
+          children: [
+            // Header verde con saludo
+            Container(
+              padding: const EdgeInsets.only(
+                top: 30,
+                left: 16,
+                right: 16,
+                bottom: 8,
+              ),
+              color: const Color(0xFF03d069),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+
+                  IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      color: Colors.white,
+                      size: 30,
                     ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        _buildUserTypeOption(
-                          label: 'Adulto',
-                          isSelected: _userType == 'Adulto',
-                          onTap: () => setState(() => _userType = 'Adulto'),
+                    onPressed: () {
+                      Navigator.pushReplacementNamed(context, '/homePage');
+                    },
+                    padding: EdgeInsets.zero,
+                    alignment: Alignment.centerLeft,
+                  ),
+
+                  // Logo Bymax
+                  Row(
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: const BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage('lib/pages/images/logo.png'),
+                            fit: BoxFit.cover,
+                          ),
                         ),
-                        const SizedBox(width: 12),
-                        _buildUserTypeOption(
-                          label: 'Familiar',
-                          isSelected: _userType == 'Familiar',
-                          onTap: () => setState(() => _userType = 'Familiar'),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Bymax',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 35,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Saludo con texto blanco
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: Colors.grey[300],
+                        child: const Icon(Icons.person, color: Colors.grey),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Hola Usuario,',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Text(
+                            'Hoy es un día maravilloso',
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Contenido principal con fondo blanco
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(20),
+                    bottom: Radius.zero,
+                  ),
+                ),
+                // Implementamos el Scrollbar aquí
+                child: Scrollbar(
+                  controller: _scrollController,
+                  thumbVisibility:
+                      true, // Hace que la barra sea siempre visible
+                  thickness: 6, // Grosor del scrollbar
+                  radius: const Radius.circular(
+                    10,
+                  ), // Bordes redondeados para el scrollbar
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 20,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Título de la sección
+                        const Center(
+                          child: Text(
+                            'Agregar Usuario',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Formulario para agregar usuario
+                        _buildTextField(
+                          controller: _nameController,
+                          label: 'Nombre completo',
+                          icon: Icons.person,
+                          onChanged: (value) => _generateCredentials(),
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: _emailController,
+                          label: 'Correo electrónico',
+                          icon: Icons.email,
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: _phoneController,
+                          label: 'Teléfono',
+                          icon: Icons.phone,
+                          keyboardType: TextInputType.phone,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Selector de tipo de usuario (rol)
+                        const Text(
+                          'Rol del usuario',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Opciones de tipo de usuario
+                        Row(
+                          children: [
+                            _buildUserTypeOption(
+                              icon: Icons.person,
+                              label: 'Adulto',
+                              isSelected: _userType == "Adulto",
+                              onTap: () {
+                                setState(() {
+                                  _userType = "Adulto";
+                                });
+                              },
+                            ),
+
+                            const SizedBox(width: 12),
+                            _buildUserTypeOption(
+                              icon: Icons.family_restroom,
+                              label: 'Familiar',
+                              isSelected: _userType == "Familiar",
+                              onTap: () {
+                                setState(() {
+                                  _userType = "Familiar";
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Sección de asignación a familia
+                        const Text(
+                          'Asignación a Familia',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Opciones para la familia
+                        Row(
+                          children: [
+                            _buildFamilyOption(
+                              icon: Icons.group,
+                              label: 'Asignar a familia existente',
+                              isSelected: !_createNewFamily,
+                              onTap: () {
+                                setState(() {
+                                  _createNewFamily = false;
+                                });
+                              },
+                            ),
+
+                            const SizedBox(width: 12),
+                            _buildFamilyOption(
+                              icon: Icons.group_add,
+                              label: 'Crear nueva familia',
+                              isSelected: _createNewFamily,
+                              onTap: () {
+                                setState(() {
+                                  _createNewFamily = true;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Mostrar el selector de familia o campo para crear una nueva
+                        if (_createNewFamily)
+                          _buildTextField(
+                            controller: _newFamilyNameController,
+                            label: 'Nombre de la nueva familia',
+                            icon: Icons.add_home,
+                          )
+                        else
+                          _isLoadingFamilies
+                              ? const Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFF03d069),
+                                ),
+                              )
+                              : _families.isEmpty
+                              ? const Center(
+                                child: Text(
+                                  'No hay familias disponibles. Cree una nueva.',
+                                ),
+                              )
+                              : Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[200],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: DropdownButtonFormField<String>(
+                                  value: _selectedFamilyId,
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    labelText: 'Seleccionar familia',
+                                    prefixIcon: Icon(
+                                      Icons.family_restroom,
+                                      color: Color(0xFF03d069),
+                                    ),
+                                  ),
+                                  items:
+                                      _families.map((family) {
+                                        return DropdownMenuItem<String>(
+                                          value: family['id'],
+                                          child: Text(family['nombre']),
+                                        );
+                                      }).toList(),
+                                  onChanged: (String? newValue) {
+                                    setState(() {
+                                      _selectedFamilyId = newValue;
+                                    });
+                                  },
+                                ),
+                              ),
+
+                        const SizedBox(height: 24),
+
+                        // Sección de credenciales generadas
+                        const Text(
+                          'Credenciales autogeneradas',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _buildTextField(
+                                controller: _usernameController,
+                                label: 'Nombre de usuario',
+                                icon: Icons.person_outline,
+                                readOnly: true,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.refresh,
+                                color: Color(0xFF03d069),
+                              ),
+                              onPressed: _generateCredentials,
+                              tooltip: 'Regenerar credenciales',
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        _buildTextField(
+                          controller: _passwordController,
+                          label: 'Contraseña',
+                          icon: Icons.lock_outline,
+                          readOnly: true,
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: _addressController,
+                          label: 'Dirección',
+                          icon: Icons.home,
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: _birthDateController,
+                          label: 'Fecha de nacimiento',
+                          icon: Icons.calendar_today,
+                          keyboardType:
+                              TextInputType.none, // Deshabilita el teclado
+                          onTap:
+                              () => _selectBirthDate(
+                                context,
+                              ), // Abre el selector de fecha
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        _buildTextField(
+                          controller: _idNumberController,
+                          label: 'Número de identificación',
+                          icon: Icons.badge,
+                        ),
+
+                        // Espacio para asegurar que el botón no se corte
+                        const SizedBox(height: 40),
+
+                        // Botón "GUARDAR USUARIO"
+                        Center(
+                          child: Container(
+                            width: 240,
+                            height: 45,
+                            margin: const EdgeInsets.only(bottom: 20),
+                            child: ElevatedButton(
+                              onPressed:
+                                  _saveUserToFirebase, // Llamamos al método para guardar en Firebase
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF03d069),
+                                foregroundColor: Colors.black,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(25),
+                                ),
+                              ),
+                              child: const Text(
+                                'GUARDAR USUARIO',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    UserForm(
-                      nameController: _nameController,
-                      emailController: _emailController,
-                      phoneController: _phoneController,
-                      addressController: _addressController,
-                      birthDateController: _birthDateController,
-                      idNumberController: _idNumberController,
-                      usernameController: _usernameController,
-                      passwordController: _passwordController,
-                      onNameChanged: (value) => _generateCredentials(),
-                      onGenerateCredentials: _generateCredentials,
-                      onSelectBirthDate: () async {
-                        DateTime? pickedDate = await showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now(),
-                          firstDate: DateTime(1900),
-                          lastDate: DateTime.now(),
-                        );
-                        if (pickedDate != null) {
-                          _birthDateController.text =
-                              "${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}";
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    FamilyOptions(
-                      createNewFamily: _createNewFamily,
-                      newFamilyNameController: _newFamilyNameController,
-                      families:
-                          _families.entries
-                              .map((e) => {'id': e.key, 'nombre': e.value})
-                              .toList(),
-                      selectedFamilyId: _selectedFamilyId,
-                      isLoadingFamilies: _isLoadingFamilies,
-                      onCreateNewFamily: () {
-                        setState(() {
-                          _createNewFamily = true;
-                        });
-                      },
-                      onAssignExistingFamily: () {
-                        setState(() {
-                          _createNewFamily = false;
-                        });
-                      },
-                      onFamilySelected: (String? newValue) {
-                        setState(() {
-                          _selectedFamilyId = newValue;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Center(
-                      child: ElevatedButton(
-                        onPressed: _saveUserToFirebase,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF03d069),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 30,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                        ),
-                        child: const Text(
-                          'GUARDAR USUARIO',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType keyboardType = TextInputType.text,
+    VoidCallback? onTap,
+    Function(String)? onChanged,
+    bool readOnly = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        readOnly: readOnly || onTap != null,
+        onTap: onTap,
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          labelText: label,
+          prefixIcon: Icon(icon, color: const Color(0xFF03d069)),
+          labelStyle: TextStyle(color: Colors.grey[600]),
+        ),
+      ),
+    );
+  }
+
+  // Widget para las opciones de tipo de usuario
   Widget _buildUserTypeOption({
+    required IconData icon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap, // Ahora podemos manejar la selección
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color:
+                isSelected
+                    ? const Color(0xFF03d069).withOpacity(0.2)
+                    : Colors.grey[200],
+            borderRadius: BorderRadius.circular(8),
+            border:
+                isSelected
+                    ? Border.all(color: const Color(0xFF03d069), width: 2)
+                    : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? const Color(0xFF03d069) : Colors.grey[600],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color:
+                      isSelected ? const Color(0xFF03d069) : Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Widget para las opciones de familia
+  Widget _buildFamilyOption({
+    required IconData icon,
     required String label,
     required bool isSelected,
     required VoidCallback onTap,
@@ -400,17 +831,117 @@ class _AddUserPageState extends State<AddUserPage> {
                     ? Border.all(color: const Color(0xFF03d069), width: 2)
                     : null,
           ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
                 color: isSelected ? const Color(0xFF03d069) : Colors.grey[600],
               ),
-            ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color:
+                      isSelected ? const Color(0xFF03d069) : Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+
+  // Widget para cada icono de la barra de navegación
+  Widget _buildNavBarItem(IconData icon, int index) {
+    final bool isSelected = _selectedIndex == index;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedIndex = index;
+        });
+
+        // Navegación según el índice seleccionado
+        if (_selectedIndex == index) {
+          switch (index) {
+            case 0:
+              Navigator.pushReplacementNamed(context, '/homePage');
+              break;
+            case 1:
+              // Ya estamos en la página de agregar usuario
+              break;
+            case 2:
+              Navigator.pushReplacementNamed(context, '/settings');
+              break;
+            case 3:
+              Navigator.pushReplacementNamed(context, '/loginPage');
+              break;
+          }
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color:
+              isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
+          size: 24,
+        ),
+      ),
+    );
+  }
+
+  // Diálogo de éxito al guardar
+  void _showSuccessDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // El usuario debe usar el botón para cerrar
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Usuario registrado exitosamente'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('El usuario ha sido registrado con éxito.'),
+                const SizedBox(height: 16),
+                const Text('Credenciales de acceso:', 
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                SelectableText('Usuario: ${_usernameController.text}',
+                  style: const TextStyle(fontFamily: 'monospace')),
+                SelectableText('Contraseña: ${_passwordController.text}',
+                  style: const TextStyle(fontFamily: 'monospace')),
+                const SizedBox(height: 16),
+                const Text('⚠️ IMPORTANTE:',
+                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Guarde o comparta estas credenciales de forma segura. '
+                  'No podrá verlas nuevamente.',
+                  style: TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('ENTENDIDO',
+                style: TextStyle(color: Color(0xFF03d069))),
+            ),
+          ],
+        );
+      },
     );
   }
 }
