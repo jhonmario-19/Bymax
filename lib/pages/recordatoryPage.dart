@@ -12,17 +12,19 @@ class RecordatoryPage extends StatefulWidget {
 
 class _RecordatoryPageState extends State<RecordatoryPage> {
   int _selectedIndex = 2;
+  // Map para almacenar actividades e íconos
+  Map<String, IconData> _activityIcons = {};
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => RecordatoryController(), // Inicializa el controlador con Firebase
+      create:
+          (_) =>
+              RecordatoryController(), // Inicializa el controlador con Firebase
       child: Scaffold(
         bottomNavigationBar: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: Color(0xFF03d069),
-          ),
+          decoration: BoxDecoration(color: Color(0xFF03d069)),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -41,15 +43,22 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
               // Header verde con saludo
               Container(
                 padding: const EdgeInsets.only(
-                    top: 30, left: 16, right: 16, bottom: 8),
+                  top: 30,
+                  left: 16,
+                  right: 16,
+                  bottom: 8,
+                ),
                 color: const Color(0xFF03d069),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 16),
                     IconButton(
-                      icon: const Icon(Icons.arrow_back,
-                          color: Colors.white, size: 30),
+                      icon: const Icon(
+                        Icons.arrow_back,
+                        color: Colors.white,
+                        size: 30,
+                      ),
                       onPressed: () {
                         Navigator.of(context).pop();
                       },
@@ -124,7 +133,10 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
                       bottom: Radius.zero,
                     ),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 20,
+                  ),
                   child: Consumer<RecordatoryController>(
                     builder: (context, controller, child) {
                       // Mostrar indicador de carga si está cargando datos
@@ -135,111 +147,159 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
                           ),
                         );
                       }
-                      
+
                       return Column(
                         children: [
                           Expanded(
-                            child: controller.recordatories.isEmpty
-                                ? Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.notifications_off_outlined,
-                                          size: 64,
-                                          color: Colors.grey[400],
-                                        ),
-                                        const SizedBox(height: 16),
-                                        Text(
-                                          'No hay recordatorios',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            color: Colors.grey[600],
-                                            fontWeight: FontWeight.w500,
+                            child:
+                                controller.recordatories.isEmpty
+                                    ? Center(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.notifications_off_outlined,
+                                            size: 64,
+                                            color: Colors.grey[400],
                                           ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Agrega un nuevo recordatorio usando el botón inferior',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey[500],
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            'No hay recordatorios',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              color: Colors.grey[600],
+                                              fontWeight: FontWeight.w500,
+                                            ),
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : ListView.builder(
-                                    itemCount: controller.recordatories.length,
-                                    itemBuilder: (context, index) {
-                                      final recordatory = controller.recordatories[index];
-                                      return Dismissible(
-                                        key: Key(recordatory.id.toString()),
-                                        background: Container(
-                                          color: Colors.red,
-                                          alignment: Alignment.centerRight,
-                                          padding: const EdgeInsets.only(right: 20),
-                                          child: const Icon(
-                                            Icons.delete,
-                                            color: Colors.white,
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Agrega un nuevo recordatorio usando el botón inferior',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey[500],
+                                            ),
                                           ),
-                                        ),
-                                        direction: DismissDirection.endToStart,
-                                        confirmDismiss: (direction) async {
-                                          return await showDialog(
-                                            context: context,
-                                            builder: (BuildContext context) {
-                                              return AlertDialog(
-                                                title: const Text("Confirmar"),
-                                                content: const Text("¿Estás seguro de que quieres eliminar este recordatorio?"),
-                                                actions: [
-                                                  TextButton(
-                                                    onPressed: () => Navigator.of(context).pop(false),
-                                                    child: const Text("Cancelar"),
+                                        ],
+                                      ),
+                                    )
+                                    : ListView.builder(
+                                      itemCount:
+                                          controller.recordatories.length,
+                                      itemBuilder: (context, index) {
+                                        final recordatory =
+                                            controller.recordatories[index];
+                                        return Dismissible(
+                                          key: Key(recordatory.id.toString()),
+                                          background: Container(
+                                            color: Colors.red,
+                                            alignment: Alignment.centerRight,
+                                            padding: const EdgeInsets.only(
+                                              right: 20,
+                                            ),
+                                            child: const Icon(
+                                              Icons.delete,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          direction:
+                                              DismissDirection.endToStart,
+                                          confirmDismiss: (direction) async {
+                                            return await showDialog(
+                                              context: context,
+                                              builder: (BuildContext context) {
+                                                return AlertDialog(
+                                                  title: const Text(
+                                                    "Confirmar",
                                                   ),
-                                                  TextButton(
-                                                    onPressed: () => Navigator.of(context).pop(true),
-                                                    child: const Text("Eliminar"),
+                                                  content: const Text(
+                                                    "¿Estás seguro de que quieres eliminar este recordatorio?",
                                                   ),
-                                                ],
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed:
+                                                          () => Navigator.of(
+                                                            context,
+                                                          ).pop(false),
+                                                      child: const Text(
+                                                        "Cancelar",
+                                                      ),
+                                                    ),
+                                                    TextButton(
+                                                      onPressed:
+                                                          () => Navigator.of(
+                                                            context,
+                                                          ).pop(true),
+                                                      child: const Text(
+                                                        "Eliminar",
+                                                      ),
+                                                    ),
+                                                  ],
+                                                );
+                                              },
+                                            );
+                                          },
+                                          onDismissed: (direction) {
+                                            controller.deleteRecordatory(
+                                              recordatory.id,
+                                            );
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  "Recordatorio eliminado",
+                                                ),
+                                                backgroundColor: Color(
+                                                  0xFF03d069,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              _showRecordatoryDetails(
+                                                context,
+                                                recordatory,
                                               );
                                             },
-                                          );
-                                        },
-                                        onDismissed: (direction) {
-                                          controller.deleteRecordatory(recordatory.id);
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(
-                                              content: Text("Recordatorio eliminado"),
-                                              backgroundColor: Color(0xFF03d069),
+                                            child: Padding(
+                                              padding: const EdgeInsets.only(
+                                                bottom: 12,
+                                              ),
+                                              child: _buildReminderItem(
+                                                icon: _getIconForActivity(
+                                                  recordatory.activityId,
+                                                ),
+                                                title: recordatory.title,
+                                                date: recordatory.date,
+                                                isNotificationEnabled:
+                                                    recordatory
+                                                        .isNotificationEnabled,
+                                                onNotificationToggle: () async {
+                                                  await controller
+                                                      .toggleNotification(
+                                                        recordatory.id,
+                                                      );
+                                                },
+                                              ),
                                             ),
-                                          );
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.only(bottom: 12),
-                                          child: _buildReminderItem(
-                                            icon: _getIconForType(recordatory.type),
-                                            title: recordatory.title,
-                                            date: recordatory.date,
-                                            isNotificationEnabled: recordatory.isNotificationEnabled,
-                                            onNotificationToggle: () async {
-                                              // Usar await para la operación asíncrona
-                                              await controller.toggleNotification(recordatory.id);
-                                            },
                                           ),
-                                        ),
-                                      );
-                                    },
-                                  ),
+                                        );
+                                      },
+                                    ),
                           ),
                           Container(
                             width: 240,
                             height: 45,
                             margin: const EdgeInsets.only(bottom: 20),
                             child: ElevatedButton(
-                              onPressed: () =>
-                                  _showAddRecordatoryDialog(context, controller),
+                              onPressed:
+                                  () => _showAddRecordatoryDialog(
+                                    context,
+                                    controller,
+                                  ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF03d069),
                                 foregroundColor: Colors.black,
@@ -291,11 +351,7 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
               color: Colors.black87,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 24,
-            ),
+            child: Icon(icon, color: Colors.white, size: 24),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -311,10 +367,7 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
                 ),
                 Text(
                   date,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
             ),
@@ -362,7 +415,8 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          color:
+              isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(
@@ -374,140 +428,444 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
     );
   }
 
-  IconData _getIconForType(String type) {
-    switch (type) {
+  // Función para obtener el ícono correspondiente a una actividad
+  IconData _getIconForActivity(String activityId) {
+    // Primero revisar si tenemos un ícono personalizado para esta actividad
+    if (_activityIcons.containsKey(activityId)) {
+      return _activityIcons[activityId]!;
+    }
+
+    // Si no, usar iconos por defecto según el ID
+    // Podemos mantener algunos iconos predeterminados por si acaso
+    switch (activityId) {
       case 'medicina':
         return Icons.medication_outlined;
       case 'actividad':
         return Icons.calendar_month_outlined;
       case 'terapia':
         return Icons.fitness_center_outlined;
+      case 'consulta':
+        return Icons.local_hospital_outlined;
+      case 'ejercicio':
+        return Icons.directions_run_outlined;
+      case 'comida':
+        return Icons.restaurant_outlined;
       default:
         return Icons.event_note;
     }
   }
 
-  void _showAddRecordatoryDialog(
-      BuildContext context, RecordatoryController controller) {
-    final titleController = TextEditingController();
-    final dateController = TextEditingController();
-    String selectedType = 'medicina';
+  void _showRecordatoryDetails(BuildContext context, Recordatory recordatory) {
+    // Obtener la lista de usuarios del controlador
+    final usuarios =
+        Provider.of<RecordatoryController>(context, listen: false).getUsers();
+    // Buscar el usuario por ID
+    final usuario = usuarios.firstWhere(
+      (u) => u['id']?.toString() == recordatory.userId,
+      orElse: () => {},
+    );
+    final nombreUsuario =
+        usuario.isNotEmpty
+            ? (usuario['nombre'] ?? usuario['username'] ?? 'Usuario sin nombre')
+            : 'Usuario no encontrado';
+
+    // Traducción para el tipo de repetición
+    String getRepeatText(String repeat, int? interval) {
+      switch (repeat) {
+        case 'diario':
+          return 'Todos los días';
+        case 'semanal':
+          return 'Cada semana';
+        case 'personalizado':
+          return interval != null && interval > 0
+              ? 'Cada $interval días'
+              : 'Personalizado';
+        default:
+          return 'No se repite';
+      }
+    }
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Nuevo Recordatorio'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(labelText: 'Título'),
+      builder:
+          (context) => AlertDialog(
+            title: Text(recordatory.title),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Fecha: ${recordatory.date}'),
+                Text('Hora: ${recordatory.time}'),
+                Text('Tipo: ${recordatory.activityId}'),
+                Text(
+                  'Notificación: ${recordatory.isNotificationEnabled ? "Activada" : "Desactivada"}',
+                ),
+                Text('Usuario: $nombreUsuario'),
+                const SizedBox(height: 8),
+                Text(
+                  'Repetición: ${getRepeatText(recordatory.repeat, recordatory.repeatInterval)}',
+                ),
+                if (recordatory.repeat != 'ninguno' &&
+                    (recordatory.repeatEndDate != null &&
+                        recordatory.repeatEndDate!.isNotEmpty))
+                  Text('Repetir hasta: ${recordatory.repeatEndDate}'),
+              ],
             ),
-            TextField(
-              controller: dateController,
-              decoration: const InputDecoration(labelText: 'Fecha'),
-              readOnly: true,
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime(2025, 12, 31),
-                );
-                if (date != null) {
-                  dateController.text = "${date.day}/${date.month}/${date.year}";
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            DropdownButton<String>(
-              value: selectedType,
-              items: ['medicina', 'actividad', 'terapia']
-                  .map((type) => DropdownMenuItem(
-                        value: type,
-                        child: Text(type),
-                      ))
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  selectedType = value;
-                }
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () async {
-              if (titleController.text.isNotEmpty &&
-                  dateController.text.isNotEmpty) {
-                // Mostrar indicador de carga mientras se agrega
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (BuildContext context) {
-                    return const Center(
-                      child: CircularProgressIndicator(
-                        color: Color(0xFF03d069),
-                      ),
-                    );
-                  },
-                );
+    );
+  }
 
-                try {
-                  // Usar await para la operación asíncrona
-                  await controller.addRecordatory(
-                    Recordatory(
-                      id: DateTime.now().millisecondsSinceEpoch,
-                      title: titleController.text,
-                      date: dateController.text,
-                      type: selectedType,
-                    ),
-                  );
-                  
-                  // Cerrar el diálogo de carga
-                  Navigator.pop(context);
-                  
-                  // Cerrar el diálogo de agregar recordatorio
-                  Navigator.pop(context);
-                  
-                  // Mostrar mensaje de éxito
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Recordatorio guardado correctamente"),
-                      backgroundColor: Color(0xFF03d069),
-                    ),
-                  );
-                } catch (e) {
-                  // Cerrar el diálogo de carga
-                  Navigator.pop(context);
-                  
-                  // Mostrar mensaje de error
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Error al guardar: $e"),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Por favor completa todos los campos"),
-                    backgroundColor: Colors.orange,
+  void _showAddRecordatoryDialog(
+    BuildContext context,
+    RecordatoryController controller,
+  ) {
+    final titleController = TextEditingController();
+    final dateController = TextEditingController();
+    final timeController = TextEditingController();
+    String? selectedActivityId;
+    String? selectedUserId;
+    TimeOfDay? selectedTime;
+    List<Map<String, dynamic>> activities = [];
+    bool isLoadingActivities = true;
+
+    // Cargar actividades desde Firebase
+    controller
+        .getActivities()
+        .then((fetchedActivities) {
+          activities = fetchedActivities;
+          isLoadingActivities = false;
+          // Actualizar estado si el diálogo está abierto
+          if (Navigator.of(context).canPop()) {
+            (context as Element).markNeedsBuild();
+          }
+        })
+        .catchError((error) {
+          print('Error al cargar actividades: $error');
+          isLoadingActivities = false;
+        });
+
+    // Campos para repetición
+    String selectedRepeat = 'ninguno';
+    int? repeatInterval;
+    final repeatEndDateController = TextEditingController();
+
+    // Obtenemos la lista de usuarios del controlador
+    List<Map<String, dynamic>> usuarios = controller.getUsers();
+
+    // Si no hay usuarios cargados, mostrar un mensaje
+    if (usuarios.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Cargando lista de usuarios..."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      // Intentar cargar los usuarios
+      controller.refreshUsers().then((_) {
+        // Si ya está abierto el diálogo, actualizamos la lista
+        usuarios = controller.getUsers();
+      });
+    }
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => StatefulBuilder(
+            builder: (context, setState) {
+              // Actualizamos la lista de usuarios dentro del StatefulBuilder
+              usuarios = controller.getUsers();
+
+              return AlertDialog(
+                title: const Text('Nuevo Recordatorio'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: titleController,
+                        decoration: const InputDecoration(labelText: 'Título'),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Dropdown para seleccionar usuario
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(
+                          labelText: 'Usuario',
+                          prefixIcon: Icon(Icons.person),
+                        ),
+                        hint: const Text('Selecciona un usuario'),
+                        value: selectedUserId,
+                        items:
+                            usuarios.map<DropdownMenuItem<String>>((usuario) {
+                              return DropdownMenuItem<String>(
+                                value: usuario['id']?.toString(),
+                                child: Text(
+                                  usuario['nombre'] ??
+                                      usuario['username'] ??
+                                      'Usuario sin nombre',
+                                ),
+                              );
+                            }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            selectedUserId = value;
+                          });
+                        },
+                      ),
+
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: dateController,
+                        decoration: const InputDecoration(
+                          labelText: 'Fecha',
+                          prefixIcon: Icon(Icons.calendar_today),
+                        ),
+                        readOnly: true,
+                        onTap: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime(2025, 12, 31),
+                          );
+                          if (date != null) {
+                            setState(() {
+                              dateController.text =
+                                  "${date.day}/${date.month}/${date.year}";
+                            });
+                          }
+                        },
+                      ),
+
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: timeController,
+                        decoration: const InputDecoration(
+                          labelText: 'Hora',
+                          prefixIcon: Icon(Icons.access_time),
+                        ),
+                        readOnly: true,
+                        onTap: () async {
+                          final time = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.now(),
+                          );
+                          if (time != null) {
+                            setState(() {
+                              timeController.text = time.format(context);
+                              selectedTime = time;
+                            });
+                          }
+                        },
+                      ),
+
+                      FutureBuilder<List<Map<String, dynamic>>>(
+                        future: controller.getActivities(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF03d069),
+                              ),
+                            );
+                          }
+
+                          if (snapshot.hasError) {
+                            return const Text('Error al cargar actividades');
+                          }
+
+                          final activities = snapshot.data ?? [];
+
+                          return DropdownButtonFormField<String>(
+                            decoration: const InputDecoration(
+                              labelText: 'Actividad',
+                              prefixIcon: Icon(Icons.category),
+                            ),
+                            hint: const Text('Selecciona una actividad'),
+                            value: selectedActivityId,
+                            items:
+                                activities.map((activity) {
+                                  return DropdownMenuItem<String>(
+                                    value: activity['id'],
+                                    child: Text(
+                                      activity['title'] ?? 'Sin título',
+                                    ),
+                                  );
+                                }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                selectedActivityId = value;
+                              });
+                            },
+                          );
+                        },
+                      ),
+
+                      // --- Campos de repetición ---
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(
+                          labelText: 'Repetir',
+                          prefixIcon: Icon(Icons.repeat),
+                        ),
+                        value: selectedRepeat,
+                        items: [
+                          DropdownMenuItem(
+                            value: 'ninguno',
+                            child: Text('No repetir'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'diario',
+                            child: Text('Todos los días'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'semanal',
+                            child: Text('Cada semana'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'personalizado',
+                            child: Text('Personalizado'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            selectedRepeat = value!;
+                          });
+                        },
+                      ),
+
+                      if (selectedRepeat == 'personalizado')
+                        TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Cada cuántos días',
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            repeatInterval = int.tryParse(value);
+                          },
+                        ),
+
+                      TextField(
+                        controller: repeatEndDateController,
+                        decoration: const InputDecoration(
+                          labelText: 'Repetir hasta (opcional)',
+                        ),
+                        readOnly: true,
+                        onTap: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime(2100),
+                          );
+                          if (date != null) {
+                            setState(() {
+                              repeatEndDateController.text =
+                                  "${date.day}/${date.month}/${date.year}";
+                            });
+                          }
+                        },
+                      ),
+                    ],
                   ),
-                );
-              }
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancelar'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      if (titleController.text.isNotEmpty &&
+                          dateController.text.isNotEmpty &&
+                          timeController.text.isNotEmpty &&
+                          selectedUserId != null &&
+                          selectedActivityId != null) {
+                        // Mostrar indicador de carga mientras se agrega
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (BuildContext context) {
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF03d069),
+                              ),
+                            );
+                          },
+                        );
+
+                        try {
+                          // Usar await para la operación asíncrona
+                          await controller.addRecordatory(
+                            Recordatory(
+                              id: DateTime.now().millisecondsSinceEpoch,
+                              title: titleController.text,
+                              date: dateController.text,
+                              activityId: selectedActivityId!,
+                              time: timeController.text,
+                              userId: selectedUserId!,
+                              creatorId: '',
+                              isNotificationEnabled: true,
+                              repeat: selectedRepeat,
+                              repeatInterval: repeatInterval ?? 0,
+                              repeatEndDate:
+                                  repeatEndDateController.text.isNotEmpty
+                                      ? repeatEndDateController.text
+                                      : '',
+                            ),
+                          );
+
+                          // Cerrar el diálogo de carga
+                          Navigator.pop(context);
+
+                          // Cerrar el diálogo de agregar recordatorio
+                          Navigator.pop(context);
+
+                          // Mostrar mensaje de éxito
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                "Recordatorio guardado correctamente",
+                              ),
+                              backgroundColor: Color(0xFF03d069),
+                            ),
+                          );
+                        } catch (e) {
+                          // Cerrar el diálogo de carga
+                          Navigator.pop(context);
+
+                          // Mostrar mensaje de error
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("Error al guardar: $e"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "Por favor completa todos los campos",
+                            ),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Guardar'),
+                  ),
+                ],
+              );
             },
-            child: const Text('Guardar'),
           ),
-        ],
-      ),
     );
   }
 }
