@@ -289,7 +289,6 @@ class RecordatoryController extends ChangeNotifier {
     }
   }
 
-  // Al cargar recordatorios para un usuario específico
   Future<void> fetchRecordatoriesForUser(String userId) async {
     _isLoading = true;
     notifyListeners();
@@ -305,13 +304,17 @@ class RecordatoryController extends ChangeNotifier {
           querySnapshot.docs.map((doc) {
             final data = doc.data();
             return Recordatory.fromMap({
-              'id': int.parse(doc.id),
-              'title': data['title'],
-              'date': data['date'],
-              'type': data['type'],
+              'id': data['id'] ?? int.tryParse(doc.id) ?? 0,
+              'title': data['title'] ?? '',
+              'date': data['date'] ?? '',
+              'activityId': data['activityId'] ?? '',
               'time': data['time'] ?? '',
-              'userId': data['userId'],
+              'userId': data['userId'] ?? '',
+              'creatorId': data['creatorId'] ?? '',
               'isNotificationEnabled': data['isNotificationEnabled'] ?? false,
+              'repeat': data['repeat'] ?? 'ninguno',
+              'repeatInterval': data['repeatInterval'] ?? 0,
+              'repeatEndDate': data['repeatEndDate'] ?? '',
             });
           }).toList();
 

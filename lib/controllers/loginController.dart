@@ -15,16 +15,21 @@ class LoginController {
           .signInWithEmailAndPassword(email: email, password: password);
 
       if (userCredential.user != null) {
-        final userData =
+        final userDoc =
             await _db
                 .collection('usuarios')
                 .doc(userCredential.user!.uid)
                 .get();
 
+        final userData = userDoc.data();
+        final userRole =
+            userData?['rol'] ?? 'adulto'; // Asegúrate que el campo sea 'rol'
+
         return {
           'success': true,
           'user': userCredential.user,
-          'userData': userData.data(),
+          'userData': userData,
+          'role': userRole,
         };
       } else {
         return {'success': false, 'message': 'No se pudo iniciar sesión'};

@@ -243,8 +243,18 @@ class _LoginPageState extends State<LoginPage> {
             _isLoading = false;
           });
 
+          // Redirigir según el rol
+          final userData = roleInfo['userData'];
+          final String rol = userData?['rol'] ?? 'adulto';
           // Redirigir a homePage para todos los usuarios
-          Navigator.pushReplacementNamed(context, '/homePage');
+          if (rol == 'adulto') {
+            Navigator.pushReplacementNamed(context, '/adultHome');
+          } else if (rol == 'admin') {
+            Navigator.pushReplacementNamed(context, '/homePage');
+          } else {
+            // Otros roles o página por defecto
+            Navigator.pushReplacementNamed(context, '/adultHome');
+          }
         } else {
           setState(() {
             _isLoading = false;

@@ -42,6 +42,7 @@ dependencies:
   shared_preferences: ^2.5.3  # Para "recordarme"
   fluttertoast: ^8.2.4  # Para mostrar mensajes
   provider: ^6.1.5 # Para el provider
+  flutter_tts: ^4.2.2
 
 dev_dependencies:
   flutter_test:
