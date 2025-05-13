@@ -1,8 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../models/recordatoryModel.dart';
-import '../controllers/UserController.dart'; // Asegúrate de que la ruta sea correcta
+import '../controllers/UserController.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class RecordatoryController extends ChangeNotifier {
   List<Recordatory> _recordatories = [];
@@ -11,6 +14,7 @@ class RecordatoryController extends ChangeNotifier {
   final String _collectionName = 'recordatorios';
   bool _isLoading = false;
   bool _isLoadingUsers = false;
+  String? _fcmToken;
 
   // Getters
   List<Recordatory> get recordatories => _recordatories;
@@ -22,6 +26,42 @@ class RecordatoryController extends ChangeNotifier {
   RecordatoryController() {
     _fetchRecordatories();
     _fetchUsers(); // Cargamos usuarios al inicializar
+    _initializeFCM();
+  }
+
+  // Configurar FCM
+  Future<void> _initializeFCM() async {
+    // Obtener el token FCM
+    _fcmToken = await FirebaseMessaging.instance.getToken();
+
+    // Actualizar el token en Firestore
+    _updateFCMToken();
+
+    // Escuchar cambios del token
+    FirebaseMessaging.instance.onTokenRefresh.listen((token) {
+      _fcmToken = token;
+      _updateFCMToken();
+    });
+
+    // Configurar manejo de mensajes
+    FirebaseMessaging.onMessage.listen(_handleMessage);
+  }
+
+  // Actualizar el token FCM en Firestore
+  Future<void> _updateFCMToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && _fcmToken != null) {
+      await _firestore.collection('usuarios').doc(user.uid).update({
+        'fcmToken': _fcmToken,
+      });
+    }
+  }
+
+  // Manejar mensaje recibido
+  void _handleMessage(RemoteMessage message) {
+    // Refrescar recordatorios cuando se recibe una notificación
+    _fetchRecordatories();
+    notifyListeners();
   }
 
   Future<void> _fetchRecordatories() async {
@@ -71,13 +111,11 @@ class RecordatoryController extends ChangeNotifier {
     }
   }
 
-  // Método para obtener usuarios creados por el usuario actual
   Future<void> _fetchUsers() async {
     try {
       _isLoadingUsers = true;
       notifyListeners();
 
-      // Obtener el ID del usuario actual
       final currentUser = UserController.auth.currentUser;
       if (currentUser == null) {
         _users = [];
@@ -86,65 +124,116 @@ class RecordatoryController extends ChangeNotifier {
         return;
       }
 
-      // Verificar si el usuario actual es admin para determinar qué usuarios mostrar
-      bool isAdmin = await UserController.isCurrentUserAdmin();
+      DocumentSnapshot userDoc =
+          await _firestore.collection('usuarios').doc(currentUser.uid).get();
 
-      if (isAdmin) {
-        // Si es admin, obtener los usuarios que ha creado
-        _users = await UserController.getUsersCreatedByAdmin(currentUser.uid);
-      } else {
-        // Si no es admin, obtener solo su propio usuario y los usuarios relacionados
-        // Esto dependerá de tu lógica de negocio
+      if (userDoc.exists) {
+        Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+        userData['id'] = currentUser.uid;
 
-        // Primero agregamos al usuario actual
-        DocumentSnapshot userDoc =
-            await _firestore.collection('usuarios').doc(currentUser.uid).get();
-        if (userDoc.exists) {
-          Map<String, dynamic> userData =
-              userDoc.data() as Map<String, dynamic>;
-          userData['id'] = currentUser.uid;
+        // Función auxiliar para normalizar la comparación de roles
+        bool isAdultUser(Map<String, dynamic> user) {
+          final role = user['rol']?.toString().toLowerCase() ?? '';
+          return role == 'adulto'; // Ahora compara en minúsculas
+        }
+
+        // Solo agregar al usuario actual si es adulto (sin importar mayúsculas)
+        if (isAdultUser(userData)) {
           _users = [userData];
+        } else {
+          _users = [];
+        }
 
-          // Si el usuario tiene una familia, obtener los miembros de la familia
-          if (userData.containsKey('familiaId') &&
-              userData['familiaId'] != null) {
-            DocumentSnapshot familyDoc =
+        bool isAdmin = userData['rol']?.toString().toLowerCase() == 'admin';
+        print('Usuario actual: ${userData['nombre']} - Es admin: $isAdmin');
+
+        if (isAdmin) {
+          try {
+            QuerySnapshot usersCreatedQuery =
                 await _firestore
-                    .collection('familias')
-                    .doc(userData['familiaId'])
+                    .collection('usuarios')
+                    .where('createdBy', isEqualTo: currentUser.uid)
                     .get();
-            if (familyDoc.exists) {
-              Map<String, dynamic> familyData =
-                  familyDoc.data() as Map<String, dynamic>;
-              if (familyData.containsKey('miembros') &&
-                  familyData['miembros'] is List) {
-                List<dynamic> memberIds = familyData['miembros'];
 
-                // Obtener detalles de cada miembro
-                for (String memberId in memberIds) {
-                  if (memberId != currentUser.uid) {
-                    // Evitar duplicar el usuario actual
-                    DocumentSnapshot memberDoc =
-                        await _firestore
-                            .collection('usuarios')
-                            .doc(memberId)
-                            .get();
-                    if (memberDoc.exists) {
-                      Map<String, dynamic> memberData =
-                          memberDoc.data() as Map<String, dynamic>;
-                      memberData['id'] = memberId;
-                      _users.add(memberData);
+            for (var doc in usersCreatedQuery.docs) {
+              Map<String, dynamic> userCreatedData =
+                  doc.data() as Map<String, dynamic>;
+              userCreatedData['id'] = doc.id;
+
+              if (doc.id != currentUser.uid && isAdultUser(userCreatedData)) {
+                _users.add(userCreatedData);
+              }
+            }
+          } catch (e) {
+            print('Error al buscar usuarios creados por admin: $e');
+          }
+        } else {
+          try {
+            if (userData.containsKey('familiaId') &&
+                userData['familiaId'] != null) {
+              DocumentSnapshot familyDoc =
+                  await _firestore
+                      .collection('familias')
+                      .doc(userData['familiaId'])
+                      .get();
+
+              if (familyDoc.exists) {
+                Map<String, dynamic> familyData =
+                    familyDoc.data() as Map<String, dynamic>;
+                if (familyData.containsKey('miembros') &&
+                    familyData['miembros'] is List) {
+                  List<dynamic> memberIds = familyData['miembros'];
+
+                  for (String memberId in memberIds) {
+                    if (memberId != currentUser.uid) {
+                      DocumentSnapshot memberDoc =
+                          await _firestore
+                              .collection('usuarios')
+                              .doc(memberId)
+                              .get();
+                      if (memberDoc.exists) {
+                        Map<String, dynamic> memberData =
+                            memberDoc.data() as Map<String, dynamic>;
+                        memberData['id'] = memberId;
+
+                        if (isAdultUser(memberData)) {
+                          _users.add(memberData);
+                        }
+                      }
                     }
                   }
                 }
               }
             }
+          } catch (e) {
+            print('Error al buscar miembros de familia: $e');
           }
-        } else {
-          _users = [];
+
+          try {
+            QuerySnapshot responsableQuery =
+                await _firestore
+                    .collection('usuarios')
+                    .where('responsableId', isEqualTo: currentUser.uid)
+                    .get();
+
+            for (var doc in responsableQuery.docs) {
+              Map<String, dynamic> userAssignedData =
+                  doc.data() as Map<String, dynamic>;
+              userAssignedData['id'] = doc.id;
+
+              if (doc.id != currentUser.uid &&
+                  !_users.any((u) => u['id'] == doc.id) &&
+                  isAdultUser(userAssignedData)) {
+                _users.add(userAssignedData);
+              }
+            }
+          } catch (e) {
+            print('Error al buscar usuarios asignados: $e');
+          }
         }
       }
 
+      print('Total de usuarios adultos cargados: ${_users.length}');
       _isLoadingUsers = false;
       notifyListeners();
     } catch (e) {
@@ -155,16 +244,31 @@ class RecordatoryController extends ChangeNotifier {
     }
   }
 
-  // Agregar método para obtener actividades
+  // Método modificado para obtener solo las actividades del usuario actual
   Future<List<Map<String, dynamic>>> getActivities() async {
     try {
-      final querySnapshot = await _firestore.collection('actividades').get();
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return [];
+
+      final querySnapshot =
+          await _firestore
+              .collection('actividades')
+              .where('userId', isEqualTo: currentUser.uid)
+              .get();
+
       return querySnapshot.docs.map((doc) {
         final data = doc.data();
-        return {'id': doc.id, 'title': data['title'], ...data};
+        return {
+          'id': doc.id,
+          'title': data['title'] ?? '',
+          'description': data['description'] ?? '',
+          'date': data['date'] ?? '',
+          'time': data['time'] ?? '',
+          'userId': data['userId'] ?? currentUser.uid,
+        };
       }).toList();
     } catch (e) {
-      print('Error al obtener actividades: $e');
+      print('Error al obtener actividades del usuario: $e');
       return [];
     }
   }
@@ -177,8 +281,6 @@ class RecordatoryController extends ChangeNotifier {
 
   // Método de conveniencia para obtener la lista de usuarios actual
   List<Map<String, dynamic>> getUsers() {
-    // Si los usuarios ya están cargados, devolver la lista
-    // Si no, devolver una lista vacía (la carga está en proceso)
     return _users;
   }
 
@@ -216,6 +318,28 @@ class RecordatoryController extends ChangeNotifier {
       // Actualizar lista local
       _recordatories.add(recordatoryWithCreator);
 
+      // Verificar si el usuario destinatario es diferente del creador
+      if (recordatory.userId != currentUser.uid) {
+        // Obtener token FCM del usuario destinatario
+        final userDoc =
+            await _firestore
+                .collection('usuarios')
+                .doc(recordatory.userId)
+                .get();
+        final userData = userDoc.data();
+        final userToken = userData?['fcmToken'];
+
+        if (userToken != null) {
+          // Enviar notificación a través de tu backend o servicio de terceros
+          await _sendNotificationToUser(
+            token: userToken,
+            title: 'Nuevo recordatorio',
+            body: recordatory.title,
+            data: {'recordatoryId': recordatory.id.toString()},
+          );
+        }
+      }
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -223,6 +347,69 @@ class RecordatoryController extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       throw e;
+    }
+  }
+
+  // Método para marcar un recordatorio como leído
+  Future<void> markRecordatoryAsRead(int id) async {
+    try {
+      final index = _recordatories.indexWhere((r) => r.id == id);
+      if (index != -1) {
+        // Actualizar en Firestore
+        await _firestore.collection(_collectionName).doc(id.toString()).update({
+          'isRead': true,
+        });
+
+        // Actualizar localmente
+        final recordatory = _recordatories[index];
+        _recordatories[index] = Recordatory(
+          id: recordatory.id,
+          title: recordatory.title,
+          date: recordatory.date,
+          time: recordatory.time,
+          activityId: recordatory.activityId,
+          userId: recordatory.userId,
+          creatorId: recordatory.creatorId,
+          isNotificationEnabled: recordatory.isNotificationEnabled,
+          repeat: recordatory.repeat,
+          repeatInterval: recordatory.repeatInterval,
+          repeatEndDate: recordatory.repeatEndDate,
+          isRead: true,
+        );
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error al marcar recordatorio como leído: $e');
+    }
+  }
+
+  // Método para enviar notificación (usando REST API de FCM)
+  Future<void> _sendNotificationToUser({
+    required String token,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    // Aquí utilizaremos una solución alternativa a Cloud Functions
+    // Puedes implementar un servicio de terceros como OneSignal o un backend simple
+
+    // Nota: Esta clave no es segura en producción, usa un backend intermedio
+    final response = await http.post(
+      Uri.parse('https://fcm.googleapis.com/fcm/send'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization':
+            'key=TU_CLAVE_DE_SERVIDOR', // Reemplazar con tu clave real de Firebase
+      },
+      body: jsonEncode({
+        'to': token,
+        'notification': {'title': title, 'body': body},
+        'data': data ?? {},
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      print('Error enviando notificación: ${response.body}');
     }
   }
 
@@ -275,7 +462,10 @@ class RecordatoryController extends ChangeNotifier {
           isNotificationEnabled: updatedNotificationStatus,
           time: recordatory.time,
           userId: recordatory.userId,
-          creatorId: recordatory.creatorId, // Added missing parameter
+          creatorId: recordatory.creatorId,
+          repeat: recordatory.repeat,
+          repeatInterval: recordatory.repeatInterval,
+          repeatEndDate: recordatory.repeatEndDate,
         );
       }
 
@@ -327,7 +517,7 @@ class RecordatoryController extends ChangeNotifier {
     }
   }
 
-  // Método para refrescar la lista de usuarios
+  // Método para refrescar la lista de usuarios explícitamente
   Future<void> refreshUsers() async {
     await _fetchUsers();
   }

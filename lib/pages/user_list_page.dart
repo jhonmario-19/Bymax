@@ -14,13 +14,11 @@ class _UserListPageState extends State<UserListPage> {
   final ScrollController _scrollController = ScrollController();
   final UserListController _controller = UserListController();
 
-  // Lista para almacenar los usuarios
   List<Map<String, dynamic>> _usuarios = [];
-  // Mapa para almacenar familias por id
   Map<String, String> _familias = {};
   bool _isLoading = true;
   String _errorMessage = '';
-  String _filterRole = 'Todos'; // Filtro por defecto
+  String _filterRole = 'Todos';
 
   @override
   void initState() {
@@ -43,7 +41,6 @@ class _UserListPageState extends State<UserListPage> {
     });
 
     try {
-      // Primero verificamos si el usuario tiene acceso de administrador
       bool isAdmin = await _controller.verifyAdminAccess();
       if (!isAdmin && mounted) {
         setState(() {
@@ -51,7 +48,10 @@ class _UserListPageState extends State<UserListPage> {
           _errorMessage = 'No tienes permisos de administrador';
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No tienes permisos de administrador')),
+          const SnackBar(
+            content: Text('No tienes permisos de administrador'),
+            backgroundColor: Colors.red,
+          ),
         );
         Future.delayed(const Duration(seconds: 2), () {
           Navigator.pushReplacementNamed(context, '/homePage');
@@ -59,7 +59,6 @@ class _UserListPageState extends State<UserListPage> {
         return;
       }
 
-      // Usamos directamente el método del controlador
       final result = await _controller.loadUsersAndFamilies();
 
       if (!mounted) return;
@@ -70,7 +69,6 @@ class _UserListPageState extends State<UserListPage> {
           _familias = Map<String, String>.from(result['familias']);
           _isLoading = false;
 
-          // Mostrar información de depuración
           print("Usuarios cargados: ${_usuarios.length}");
           if (_usuarios.isEmpty) {
             _errorMessage =
@@ -90,10 +88,13 @@ class _UserListPageState extends State<UserListPage> {
         _isLoading = false;
         _errorMessage = e.toString();
       });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error al cargar usuarios: $e')));
-      // Redirigir al home si no hay permisos
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al cargar usuarios: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+
       if (e.toString().contains("No tienes permisos")) {
         Future.delayed(const Duration(seconds: 2), () {
           Navigator.pushReplacementNamed(context, '/homePage');
@@ -102,13 +103,11 @@ class _UserListPageState extends State<UserListPage> {
     }
   }
 
-  // Método para filtrar usuarios por rol (case-insensitive)
   List<Map<String, dynamic>> _getFilteredUsers() {
     if (_filterRole == 'Todos') {
       return _usuarios;
     }
 
-    // Filtrar usuarios de manera insensible a mayúsculas/minúsculas
     final lowerCaseFilter = _filterRole.toLowerCase();
     return _usuarios.where((usuario) {
       final userRole = usuario['rol']?.toString().toLowerCase() ?? '';
@@ -116,73 +115,229 @@ class _UserListPageState extends State<UserListPage> {
     }).toList();
   }
 
-  // Función para mostrar información del usuario en una tarjeta más detallada
   void _showUserDetails(Map<String, dynamic> usuario) {
     showDialog(
       context: context,
       builder:
-          (context) => AlertDialog(
-            title: Text(usuario['nombre'] ?? 'Sin nombre'),
-            content: SingleChildScrollView(
+          (context) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            elevation: 8,
+            child: Container(
+              width: double.infinity,
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: Colors.white,
+              ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('ID: ${usuario['id']}'),
-                  Text('Email: ${usuario['email'] ?? 'No disponible'}'),
-                  Text('Rol: ${usuario['rol'] ?? 'No definido'}'),
-                  Text(
-                    'Familia: ${_controller.getFamilyName(_familias, usuario['familiaId'])}',
+                  // Header con avatar y nombre (fuera del scroll)
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 30,
+                          backgroundColor: const Color(
+                            0xFF03d069,
+                          ).withOpacity(0.2),
+                          child: Icon(
+                            Icons.person,
+                            size: 35,
+                            color: const Color(0xFF03d069),
+                          ),
+                        ),
+                        const SizedBox(width: 15),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                usuario['nombre'] ?? 'Sin nombre',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _getRoleColor(usuario['rol']),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  usuario['rol'] ?? 'No definido',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  Text('Creado por: ${usuario['createdBy'] ?? 'No definido'}'),
-                  // Mostrar todos los campos disponibles
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Información adicional:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                  const Divider(height: 1),
+
+                  // Contenido desplazable
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(children: _buildUserInfoItems(usuario)),
+                    ),
                   ),
-                  ...usuario.entries
-                      .where(
-                        (entry) =>
-                            ![
-                              'id',
-                              'email',
-                              'rol',
-                              'familiaId',
-                              'createdBy',
-                              'nombre',
-                            ].contains(entry.key),
-                      )
-                      .map((entry) => Text('${entry.key}: ${entry.value}')),
+
+                  // Botón de cerrar (fuera del scroll)
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF03d069),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cerrar',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cerrar'),
-              ),
-            ],
           ),
     );
   }
 
+  List<Widget> _buildUserInfoItems(Map<String, dynamic> usuario) {
+    // Lista de campos que quieres mostrar en orden
+    final fieldsList = [
+      {'key': 'email', 'label': 'Email', 'icon': Icons.email},
+      {'key': 'rol', 'label': 'Rol', 'icon': Icons.badge},
+      {'key': 'familiaId', 'label': 'Familia', 'icon': Icons.family_restroom},
+      {
+        'key': 'fechaNacimiento',
+        'label': 'Fecha de nacimiento',
+        'icon': Icons.cake,
+      },
+      {'key': 'direccion', 'label': 'Dirección', 'icon': Icons.home},
+      {
+        'key': 'numeroIdentificacion',
+        'label': 'Número de identificación',
+        'icon': Icons.credit_card,
+      },
+      {'key': 'telefono', 'label': 'Teléfono', 'icon': Icons.phone},
+      {'key': 'username', 'label': 'Nombre de usuario', 'icon': Icons.person},
+    ];
+
+    return fieldsList.map((field) {
+      String value;
+      if (field['key'] == 'familiaId') {
+        value = _controller.getFamilyName(_familias, usuario['familiaId']);
+      } else {
+        value = usuario[field['key']]?.toString() ?? 'No disponible';
+      }
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              field['icon'] as IconData,
+              size: 20,
+              color: const Color(0xFF03d069),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    field['label'] as String,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList();
+  }
+
+  Color _getRoleColor(String? role) {
+    if (role == null) return Colors.grey;
+
+    switch (role.toLowerCase()) {
+      case 'adulto':
+        return Colors.blue;
+      case 'familiar':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Filtrar usuarios según el rol seleccionado
     final filteredUsers = _getFilteredUsers();
 
     return Scaffold(
-      // Botón para recargar
       floatingActionButton: FloatingActionButton(
         onPressed: _loadUsuariosYFamilias,
         backgroundColor: const Color(0xFF03d069),
-        child: const Icon(Icons.refresh),
+        elevation: 4,
+        child: const Icon(Icons.refresh, color: Colors.white),
       ),
-      // Barra de navegación inferior
       bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: const BoxDecoration(color: Color(0xFF03d069)),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF03d069),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
@@ -195,86 +350,115 @@ class _UserListPageState extends State<UserListPage> {
       ),
       body: Container(
         width: double.infinity,
-        color: const Color(0xFF03d069), // Color verde de fondo
+        color: const Color(0xFF03d069),
         child: Column(
           children: [
             // Header verde con saludo
             Container(
               padding: const EdgeInsets.only(
-                top: 30,
-                left: 16,
-                right: 16,
-                bottom: 8,
+                top: 40,
+                left: 20,
+                right: 20,
+                bottom: 15,
               ),
               color: const Color(0xFF03d069),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 16),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.arrow_back,
-                      color: Colors.white,
-                      size: 30,
-                    ),
-                    onPressed: () {
-                      Navigator.pushReplacementNamed(context, '/homePage');
-                    },
-                    padding: EdgeInsets.zero,
-                    alignment: Alignment.centerLeft,
-                  ),
-                  // Logo Bymax
+                  const SizedBox(height: 10),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                        onPressed: () {
+                          Navigator.pushReplacementNamed(context, '/homePage');
+                        },
+                        padding: EdgeInsets.zero,
+                        alignment: Alignment.centerLeft,
+                      ),
+                      // Logo más prominente
                       Container(
-                        width: 50,
-                        height: 50,
-                        decoration: const BoxDecoration(
-                          image: DecorationImage(
-                            image: AssetImage('lib/pages/images/logo.png'),
-                            fit: BoxFit.cover,
-                          ),
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Bymax',
-                        style: TextStyle(
-                          color: Colors.black,
-                          fontSize: 35,
-                          fontWeight: FontWeight.bold,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: const BoxDecoration(
+                                image: DecorationImage(
+                                  image: AssetImage(
+                                    'lib/pages/images/logo.png',
+                                  ),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Bymax',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                  // Saludo con texto blanco
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.grey[300],
-                        child: const Icon(Icons.person, color: Colors.grey),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Hola Administrador,',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: Colors.white.withOpacity(0.3),
+                          child: const Icon(
+                            Icons.admin_panel_settings,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 15),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Hola, Administrador',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                          const Text(
-                            'Administra tus usuarios',
-                            style: TextStyle(color: Colors.white, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ],
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Administra tus usuarios',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -285,7 +469,7 @@ class _UserListPageState extends State<UserListPage> {
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(20),
+                    top: Radius.circular(25),
                     bottom: Radius.zero,
                   ),
                 ),
@@ -293,37 +477,46 @@ class _UserListPageState extends State<UserListPage> {
                   children: [
                     // Cabecera con título y filtros
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                      padding: const EdgeInsets.fromLTRB(20, 30, 20, 10),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Título de la sección
-                          const Center(
-                            child: Text(
-                              'Lista de Usuarios',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          // Filtros por rol
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+                              Icon(
+                                Icons.people_alt,
+                                color: const Color(0xFF03d069),
+                                size: 24,
+                              ),
+                              const SizedBox(width: 10),
                               const Text(
-                                'Filtrar por: ',
+                                'Lista de Usuarios',
                                 style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                            ],
+                          ),
+                          const SizedBox(height: 25),
+                          // Filtros por rol
+                          const Text(
+                            'Filtrar por rol:',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
                               _buildFilterChip('Todos'),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 10),
                               _buildFilterChip('Adulto'),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 10),
                               _buildFilterChip('Familiar'),
                             ],
                           ),
@@ -334,9 +527,23 @@ class _UserListPageState extends State<UserListPage> {
                     Expanded(
                       child:
                           _isLoading
-                              ? const Center(
-                                child: CircularProgressIndicator(
-                                  color: Color(0xFF03d069),
+                              ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const CircularProgressIndicator(
+                                      color: Color(0xFF03d069),
+                                      strokeWidth: 3,
+                                    ),
+                                    const SizedBox(height: 15),
+                                    Text(
+                                      'Cargando usuarios...',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               )
                               : filteredUsers.isEmpty
@@ -344,18 +551,28 @@ class _UserListPageState extends State<UserListPage> {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Text(
+                                    Icon(
+                                      Icons.person_off,
+                                      size: 60,
+                                      color: Colors.grey[400],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
                                       'No hay usuarios para mostrar',
-                                      style: TextStyle(fontSize: 16),
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey[700],
+                                      ),
                                     ),
                                     if (_errorMessage.isNotEmpty)
                                       Padding(
                                         padding: const EdgeInsets.all(16),
                                         child: Text(
-                                          'Detalle: $_errorMessage',
-                                          style: const TextStyle(
+                                          _errorMessage,
+                                          style: TextStyle(
                                             fontSize: 14,
-                                            color: Colors.red,
+                                            color: Colors.red[400],
                                           ),
                                           textAlign: TextAlign.center,
                                         ),
@@ -370,7 +587,12 @@ class _UserListPageState extends State<UserListPage> {
                                 radius: const Radius.circular(10),
                                 child: ListView.builder(
                                   controller: _scrollController,
-                                  padding: const EdgeInsets.all(16),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    5,
+                                    16,
+                                    80,
+                                  ),
                                   itemCount: filteredUsers.length,
                                   itemBuilder: (context, index) {
                                     final usuario = filteredUsers[index];
@@ -395,41 +617,112 @@ class _UserListPageState extends State<UserListPage> {
       _familias,
       usuario['familiaId'],
     );
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: () => _showUserDetails(usuario),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                usuario['nombre'] ?? 'Sin nombre',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showUserDetails(usuario),
+          borderRadius: BorderRadius.circular(15),
+          child: Padding(
+            padding: const EdgeInsets.all(15),
+            child: Row(
+              children: [
+                // Avatar circular con icono o primera letra del nombre
+                CircleAvatar(
+                  radius: 25,
+                  backgroundColor: _getRoleColor(
+                    usuario['rol'],
+                  ).withOpacity(0.2),
+                  child: Text(
+                    (usuario['nombre'] ?? 'U').substring(0, 1).toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: _getRoleColor(usuario['rol']),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text('Email: ${usuario['email'] ?? 'No disponible'}'),
-              Text('Familia: $familyName'),
-              Text('Rol: ${usuario['rol'] ?? 'Desconocido'}'),
-              // Añadir indicador de creador
-              Text(
-                'Creado por: ${usuario['createdBy'] != null ? (usuario['createdBy'] == UserController.auth.currentUser?.uid ? 'Tí' : 'Otro admin') : 'Desconocido'}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color:
-                      usuario['createdBy'] ==
-                              UserController.auth.currentUser?.uid
-                          ? Colors.green
-                          : Colors.grey,
+                const SizedBox(width: 15),
+                // Información del usuario
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        usuario['nombre'] ?? 'Sin nombre',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        usuario['email'] ?? 'No disponible',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.family_restroom,
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            familyName,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getRoleColor(
+                                usuario['rol'],
+                              ).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              usuario['rol'] ?? 'Desconocido',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: _getRoleColor(usuario['rol']),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                // Icono de chevron para indicar que se puede tocar
+                Icon(Icons.chevron_right, color: Colors.grey[400], size: 24),
+              ],
+            ),
           ),
         ),
       ),
@@ -447,18 +740,45 @@ class _UserListPageState extends State<UserListPage> {
         });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFF03d069) : Colors.grey[200],
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow:
+              isSelected
+                  ? [
+                    BoxShadow(
+                      color: const Color(0xFF03d069).withOpacity(0.3),
+                      blurRadius: 5,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                  : null,
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.black87,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
+        child: Row(
+          children: [
+            if (isSelected)
+              Padding(
+                padding: const EdgeInsets.only(right: 5),
+                child: Icon(
+                  label == 'Todos'
+                      ? Icons.people
+                      : label == 'Adulto'
+                      ? Icons.person
+                      : Icons.family_restroom,
+                  color: Colors.white,
+                  size: 14,
+                ),
+              ),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.black87,
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -515,16 +835,31 @@ class _UserListPageState extends State<UserListPage> {
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
           color:
               isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(15),
         ),
-        child: Icon(
-          icon,
-          color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
-          size: 24,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
+              size: 24,
+            ),
+            if (isSelected)
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+              ),
+          ],
         ),
       ),
     );

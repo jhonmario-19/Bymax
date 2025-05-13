@@ -10,6 +10,7 @@ class Recordatory {
   final String repeat;
   final int repeatInterval;
   final String repeatEndDate;
+  final bool isRead;
 
   Recordatory({
     required this.id,
@@ -23,6 +24,7 @@ class Recordatory {
     this.repeat = 'ninguno',
     this.repeatInterval = 0,
     this.repeatEndDate = '',
+    this.isRead = false,
   });
 
   factory Recordatory.fromMap(Map<String, dynamic> map) {
@@ -38,6 +40,7 @@ class Recordatory {
       repeat: map['repeat'] ?? 'ninguno',
       repeatInterval: map['repeatInterval'] ?? 0,
       repeatEndDate: map['repeatEndDate'] ?? '',
+      isRead: map['isRead'] ?? false,
     );
   }
 
@@ -54,6 +57,7 @@ class Recordatory {
       'repeat': repeat,
       'repeatInterval': repeatInterval,
       'repeatEndDate': repeatEndDate,
+      'isRead': isRead,
     };
   }
 }

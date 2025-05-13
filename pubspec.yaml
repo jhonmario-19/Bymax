@@ -43,6 +43,8 @@ dependencies:
   fluttertoast: ^8.2.4  # Para mostrar mensajes
   provider: ^6.1.5 # Para el provider
   flutter_tts: ^4.2.2
+  firebase_messaging: ^15.2.5
+  flutter_local_notifications: ^19.2.0
 
 dev_dependencies:
   flutter_test:

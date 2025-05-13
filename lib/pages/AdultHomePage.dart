@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // Añadida importación para notificaciones
 import '../controllers/recordatoryController.dart';
 import '../controllers/loginController.dart';
 import '../models/recordatoryModel.dart'; // Asegúrate de que esta importación sea correcta para tu Recordatory
@@ -27,6 +28,23 @@ class _AdultHomePageState extends State<AdultHomePages> {
     super.initState();
     _loadUserInfo();
     _initializeTTS(); // Inicializar el servicio TTS
+    _configureNotifications(); // Añadido para configurar las notificaciones
+  }
+
+  // Configurar permisos de notificaciones
+  Future<void> _configureNotifications() async {
+    // Solicitar permiso para notificaciones
+    await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // Configurar manejo de notificaciones cuando la app está en segundo plano
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      // Actualizar la interfaz cuando se abre la app desde una notificación
+      setState(() {});
+    });
   }
 
   // Inicializar el servicio TTS
@@ -357,6 +375,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                 // Verificar si este recordatorio se está reproduciendo
                                 final isSpeaking =
                                     _speakingRecordatoryId == rec.id;
+                                final isUnread = !rec.isRead;
 
                                 return Card(
                                   elevation: 2,
@@ -364,13 +383,26 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  // Destacar el card si se está reproduciendo
+                                  // Destacar el card según estado de lectura/reproducción
                                   color:
-                                      isSpeaking
-                                          ? const Color(0xFFE1F5FE)
-                                          : Colors.white,
+                                      isUnread
+                                          ? const Color(
+                                            0xFFFFF9C4,
+                                          ) // Amarillo claro para no leídos
+                                          : (isSpeaking
+                                              ? const Color(0xFFE1F5FE)
+                                              : Colors.white),
                                   child: InkWell(
-                                    onTap: () => _speakRecordatory(rec),
+                                    onTap: () {
+                                      // Si no está leído, marcarlo como leído
+                                      if (isUnread) {
+                                        Provider.of<RecordatoryController>(
+                                          context,
+                                          listen: false,
+                                        ).markRecordatoryAsRead(rec.id);
+                                      }
+                                      _speakRecordatory(rec);
+                                    },
                                     borderRadius: BorderRadius.circular(12),
                                     child: Stack(
                                       children: [
@@ -460,6 +492,20 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                                 fontSize: 10,
                                                 color: Colors.grey[600],
                                                 fontStyle: FontStyle.italic,
+                                              ),
+                                            ),
+                                          ),
+                                        // Añadir indicador de no leído
+                                        if (isUnread)
+                                          Positioned(
+                                            right: 10,
+                                            top: 10,
+                                            child: Container(
+                                              width: 12,
+                                              height: 12,
+                                              decoration: const BoxDecoration(
+                                                color: Colors.red,
+                                                shape: BoxShape.circle,
                                               ),
                                             ),
                                           ),

@@ -129,19 +129,6 @@ class UserController {
     }
   }
 
-  // Método para generar una contraseña segura
-  static String generatePassword() {
-    const chars =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#\$%^&*()';
-    Random random = Random();
-    return String.fromCharCodes(
-      Iterable.generate(
-        12, // Longitud de la contraseña
-        (_) => chars.codeUnitAt(random.nextInt(chars.length)),
-      ),
-    );
-  }
-
   // Método para obtener el rol de un usuario
   static Future<String> getUserRole(String userId) async {
     try {

@@ -99,12 +99,15 @@ class _AddUserPageState extends State<AddUserPage> {
   }
 
   void _generateCredentials() {
-    // Generate unique username
-    _usernameController.text =
-        'user${DateTime.now().millisecondsSinceEpoch % 10000}';
-
-    // Use the password generator from UserController
-    _passwordController.text = UserController.generatePassword();
+    String name = _nameController.text.trim().toLowerCase();
+    name = name.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if (name.isEmpty) {
+      name = 'usuario${DateTime.now().millisecondsSinceEpoch % 1000}';
+    } else {
+      name = name.length > 10 ? name.substring(0, 10) : name;
+    }
+    _usernameController.text = name;
+    _passwordController.text = name;
   }
 
   Future<void> _saveUserToFirebase() async {
@@ -139,9 +142,9 @@ class _AddUserPageState extends State<AddUserPage> {
 
     try {
       String familyId;
+
       // Maneja la creación o selección de familia
       if (_createNewFamily && _newFamilyNameController.text.isNotEmpty) {
-        // Crear nueva familia con el campo createdBy
         DocumentReference familyRef = await FirebaseFirestore.instance
             .collection('familias')
             .add({
@@ -164,14 +167,15 @@ class _AddUserPageState extends State<AddUserPage> {
         return;
       }
 
+      // Captura las credenciales actuales antes del registro
+      final currentUsername = _usernameController.text.trim();
+      final currentPassword = _passwordController.text.trim();
+
       // Verificar si el nombre de usuario es único
-      bool isUnique = await UserController.isUsernameUnique(
-        _usernameController.text.trim(),
-      );
+      bool isUnique = await UserController.isUsernameUnique(currentUsername);
+      String finalUsername = currentUsername;
       if (!isUnique) {
-        // Generar un nuevo nombre de usuario si el actual no es único
-        _usernameController.text =
-            'user${DateTime.now().millisecondsSinceEpoch}';
+        finalUsername = 'user${DateTime.now().millisecondsSinceEpoch}';
       }
 
       // Preparar datos del usuario
@@ -182,8 +186,8 @@ class _AddUserPageState extends State<AddUserPage> {
         'direccion': _addressController.text.trim(),
         'fechaNacimiento': _birthDateController.text.trim(),
         'numeroIdentificacion': _idNumberController.text.trim(),
-        'username': _usernameController.text.trim(),
-        'rol': _userType, // Mantener el rol del usuario
+        'username': finalUsername,
+        'rol': _userType,
         'familiaId': familyId,
         'fechaRegistro': DateTime.now().toString(),
         'isAdmin': false,
@@ -192,22 +196,23 @@ class _AddUserPageState extends State<AddUserPage> {
       // Registrar nuevo usuario
       final result = await UserController.registerNewUser(
         email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        password: currentPassword,
         userData: userData,
         adminPassword: adminPassword,
       );
 
       if (result['success']) {
-        // Obtener el ID del usuario recién creado
         String newUserId = result['usuario']['uid'];
-
-        // Añadir explícitamente el usuario a la familia
         await UserController.addUserToFamily(familyId, newUserId);
 
-        _showSuccessDialog(context);
-        _clearFields();
+        // Mostrar diálogo con las credenciales capturadas
+        _showSuccessDialog(
+          context,
+          username: finalUsername,
+          password: currentPassword,
+        );
 
-        // Actualizar la lista de familias
+        _clearFields();
         _loadFamilies();
       } else {
         throw Exception(result['message']);
@@ -217,7 +222,6 @@ class _AddUserPageState extends State<AddUserPage> {
         context,
       ).showSnackBar(SnackBar(content: Text('Error al guardar: $e')));
     } finally {
-      // Finalizar estado de carga
       setState(() {
         _isSaving = false;
       });
@@ -322,10 +326,14 @@ class _AddUserPageState extends State<AddUserPage> {
     _generateCredentials();
   }
 
-  void _showSuccessDialog(BuildContext context) {
+  void _showSuccessDialog(
+    BuildContext context, {
+    required String username,
+    required String password,
+  }) {
     showDialog(
       context: context,
-      barrierDismissible: false, // El usuario debe usar el botón para cerrar
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Usuario registrado exitosamente'),
@@ -342,11 +350,11 @@ class _AddUserPageState extends State<AddUserPage> {
                 ),
                 const SizedBox(height: 8),
                 SelectableText(
-                  'Usuario: ${_usernameController.text}',
+                  'Usuario: $username',
                   style: const TextStyle(fontFamily: 'monospace'),
                 ),
                 SelectableText(
-                  'Contraseña: ${_passwordController.text}',
+                  'Contraseña: $password',
                   style: const TextStyle(fontFamily: 'monospace'),
                 ),
                 const SizedBox(height: 16),
