@@ -16,6 +16,19 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
   Map<String, IconData> _activityIcons = {};
 
   @override
+  void initState() {
+    super.initState();
+    // Inicializar el controlador aquí para asegurar que tenemos toda la información del usuario
+    Future.delayed(Duration.zero, () {
+      final controller = Provider.of<RecordatoryController>(
+        context,
+        listen: false,
+      );
+      // Refrescar la lista de usuarios para asegurar que estén filtrados correctamente
+      controller.refreshUsers();
+    });
+  }
+
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create:
@@ -462,6 +475,9 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
       listen: false,
     );
 
+    // Obtener el rol del usuario actual
+    String? currentUserRole = controller.currentUserRole;
+
     // Buscar el nombre del usuario
     String nombreUsuario = "Usuario";
     for (final user in controller.users) {
@@ -533,6 +549,27 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
                         (recordatory.repeatEndDate != null &&
                             recordatory.repeatEndDate!.isNotEmpty))
                       Text('Repetir hasta: ${recordatory.repeatEndDate}'),
+
+                    // Mostrar información adicional para usuarios Familiares
+                    if (currentUserRole == 'Familiar')
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12.0),
+                        child: Container(
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[50],
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.blue[300]!),
+                          ),
+                          child: Text(
+                            'Como usuario Familiar, solo puedes crear y ver recordatorios para usuarios Adulto de tu familia.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.blue[800],
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 actions: [
@@ -564,436 +601,362 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
   }
 
   // Modifica el método _showAddRecordatoryDialog para solucionar el desbordamiento
-  void _showAddRecordatoryDialog(
+  // Modifica el método _showAddRecordatoryDialog incluyendo estos cambios
+
+  Future<void> _showAddRecordatoryDialog(
     BuildContext context,
     RecordatoryController controller,
-  ) {
-    final titleController = TextEditingController();
-    final dateController = TextEditingController();
-    final timeController = TextEditingController();
-    String? selectedActivityId;
-    String? selectedUserId;
-    TimeOfDay? selectedTime;
-    List<Map<String, dynamic>> activities = [];
-    bool isLoadingActivities = true;
+  ) async {
+    final _formKey = GlobalKey<FormState>();
+    final TextEditingController _titleController = TextEditingController();
+    final TextEditingController _dateController = TextEditingController();
+    final TextEditingController _timeController = TextEditingController();
+    bool _isNotificationEnabled = true;
+    String _selectedActivity = '';
+    String _selectedUserId = '';
+    String _selectedRepeat = 'ninguno';
+    int _repeatInterval = 1;
+    String _repeatEndDate = '';
 
-    // Cargar actividades desde Firebase
-    controller
-        .getActivities()
-        .then((fetchedActivities) {
-          activities = fetchedActivities;
-          isLoadingActivities = false;
-          // Actualizar estado si el diálogo está abierto
-          if (Navigator.of(context).canPop()) {
-            (context as Element).markNeedsBuild();
-          }
-        })
-        .catchError((error) {
-          print('Error al cargar actividades: $error');
-          isLoadingActivities = false;
-        });
+    List<Map<String, dynamic>> activities = await controller.getActivities();
 
-    // Campos para repetición
-    String selectedRepeat = 'ninguno';
-    int? repeatInterval;
-    final repeatEndDateController = TextEditingController();
-
-    // Obtenemos la lista de usuarios del controlador
-    List<Map<String, dynamic>> usuarios = controller.getUsers();
-
-    // Si no hay usuarios cargados, mostrar un mensaje
-    if (usuarios.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Cargando lista de usuarios..."),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      // Intentar cargar los usuarios
-      controller.refreshUsers().then((_) {
-        // Si ya está abierto el diálogo, actualizamos la lista
-        usuarios = controller.getUsers();
-      });
-    }
+    // Obtener el rol del usuario actual
+    final String? currentUserRole = controller.currentUserRole;
 
     showDialog(
       context: context,
-      builder:
-          (context) => StatefulBuilder(
-            builder: (context, setState) {
-              // Actualizamos la lista de usuarios dentro del StatefulBuilder
-              usuarios = controller.getUsers();
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            // Obtener la lista de usuarios disponibles
+            List<Map<String, dynamic>> usuarios = controller.getUsers();
 
-              return Dialog(
-                // Usar Dialog en lugar de AlertDialog para tener más control
-                insetPadding: EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 24,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Container(
-                  width:
-                      MediaQuery.of(context).size.width *
-                      0.9, // Ancho controlado
-                  constraints: BoxConstraints(
-                    maxHeight:
-                        MediaQuery.of(context).size.height *
-                        0.8, // Altura máxima
+            // Verificar si el usuario es Familiar y no hay usuarios adultos disponibles
+            if (currentUserRole == 'Familiar' && usuarios.isEmpty) {
+              // Mostrar mensaje en la interfaz
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      "No hay usuarios adultos en tu familia disponibles para asignar recordatorios.",
+                    ),
+                    backgroundColor: Colors.orange,
+                    duration: Duration(seconds: 5),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Título del diálogo
-                        const Text(
-                          'Nuevo Recordatorio',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+                );
+              });
+            }
+
+            // Si la lista de usuarios no está vacía, seleccionar el primer usuario por defecto
+            if (usuarios.isNotEmpty && _selectedUserId.isEmpty) {
+              _selectedUserId = usuarios[0]['id'];
+            }
+
+            // Si la lista de actividades no está vacía, seleccionar la primera actividad por defecto
+            if (activities.isNotEmpty && _selectedActivity.isEmpty) {
+              _selectedActivity = activities[0]['id'];
+            }
+
+            return AlertDialog(
+              title: const Text('Nuevo Recordatorio'),
+              content: Form(
+                key: _formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: _titleController,
+                        decoration: const InputDecoration(labelText: 'Título'),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Por favor ingresa un título';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _dateController,
+                        decoration: const InputDecoration(
+                          labelText: 'Fecha',
+                          suffixIcon: Icon(Icons.calendar_today),
                         ),
-                        const SizedBox(height: 16),
-
-                        // Contenido con scroll
-                        Flexible(
-                          child: SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                TextField(
-                                  controller: titleController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Título',
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-
-                                // Dropdown para seleccionar usuario - Corregido para evitar desbordamiento
-                                DropdownButtonFormField<String>(
-                                  decoration: const InputDecoration(
-                                    labelText: 'Usuario',
-                                    prefixIcon: Icon(Icons.person),
-                                  ),
-                                  hint: const Text('Selecciona un usuario'),
-                                  value: selectedUserId,
-                                  isExpanded:
-                                      true, // Importante: evita desbordamiento
-                                  items:
-                                      usuarios.map<DropdownMenuItem<String>>((
-                                        usuario,
-                                      ) {
-                                        return DropdownMenuItem<String>(
-                                          value: usuario['id']?.toString(),
-                                          child: Text(
-                                            (usuario['nombre'] ??
-                                                usuario['username'] ??
-                                                'Usuario sin nombre'),
-                                            overflow:
-                                                TextOverflow
-                                                    .ellipsis, // Trunca texto largo
-                                          ),
-                                        );
-                                      }).toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      selectedUserId = value;
-                                    });
-                                  },
-                                ),
-
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: dateController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Fecha',
-                                    prefixIcon: Icon(Icons.calendar_today),
-                                  ),
-                                  readOnly: true,
-                                  onTap: () async {
-                                    final date = await showDatePicker(
-                                      context: context,
-                                      initialDate: DateTime.now(),
-                                      firstDate: DateTime.now(),
-                                      lastDate: DateTime(2025, 12, 31),
-                                    );
-                                    if (date != null) {
-                                      setState(() {
-                                        dateController.text =
-                                            "${date.day}/${date.month}/${date.year}";
-                                      });
-                                    }
-                                  },
-                                ),
-
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: timeController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Hora',
-                                    prefixIcon: Icon(Icons.access_time),
-                                  ),
-                                  readOnly: true,
-                                  onTap: () async {
-                                    final time = await showTimePicker(
-                                      context: context,
-                                      initialTime: TimeOfDay.now(),
-                                    );
-                                    if (time != null) {
-                                      setState(() {
-                                        timeController.text = time.format(
-                                          context,
-                                        );
-                                        selectedTime = time;
-                                      });
-                                    }
-                                  },
-                                ),
-
-                                const SizedBox(height: 16),
-                                FutureBuilder<List<Map<String, dynamic>>>(
-                                  future: controller.getActivities(),
-                                  builder: (context, snapshot) {
-                                    if (snapshot.connectionState ==
-                                        ConnectionState.waiting) {
-                                      return const Center(
-                                        child: CircularProgressIndicator(
-                                          color: Color(0xFF03d069),
-                                        ),
-                                      );
-                                    }
-
-                                    if (snapshot.hasError) {
-                                      return const Text(
-                                        'Error al cargar actividades',
-                                      );
-                                    }
-
-                                    final activities = snapshot.data ?? [];
-
-                                    return DropdownButtonFormField<String>(
-                                      decoration: const InputDecoration(
-                                        labelText: 'Actividad',
-                                        prefixIcon: Icon(Icons.category),
-                                      ),
-                                      hint: const Text(
-                                        'Selecciona una actividad',
-                                      ),
-                                      value: selectedActivityId,
-                                      isExpanded:
-                                          true, // Importante: evita desbordamiento
-                                      items:
-                                          activities.map((activity) {
-                                            return DropdownMenuItem<String>(
-                                              value: activity['id'],
-                                              child: Text(
-                                                activity['title'] ??
-                                                    'Sin título',
-                                                overflow:
-                                                    TextOverflow
-                                                        .ellipsis, // Trunca texto largo
-                                              ),
-                                            );
-                                          }).toList(),
-                                      onChanged: (value) {
-                                        setState(() {
-                                          selectedActivityId = value;
-                                        });
-                                      },
-                                    );
-                                  },
-                                ),
-
-                                // --- Campos de repetición ---
-                                const SizedBox(height: 16),
-                                DropdownButtonFormField<String>(
-                                  decoration: const InputDecoration(
-                                    labelText: 'Repetir',
-                                    prefixIcon: Icon(Icons.repeat),
-                                  ),
-                                  value: selectedRepeat,
-                                  isExpanded:
-                                      true, // Importante: evita desbordamiento
-                                  items: [
-                                    DropdownMenuItem(
-                                      value: 'ninguno',
-                                      child: Text('No repetir'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'diario',
-                                      child: Text('Todos los días'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'semanal',
-                                      child: Text('Cada semana'),
-                                    ),
-                                    DropdownMenuItem(
-                                      value: 'personalizado',
-                                      child: Text('Personalizado'),
-                                    ),
-                                  ],
-                                  onChanged: (value) {
-                                    setState(() {
-                                      selectedRepeat = value!;
-                                    });
-                                  },
-                                ),
-
-                                if (selectedRepeat == 'personalizado')
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 16),
-                                    child: TextField(
-                                      decoration: const InputDecoration(
-                                        labelText: 'Cada cuántos días',
-                                      ),
-                                      keyboardType: TextInputType.number,
-                                      onChanged: (value) {
-                                        repeatInterval = int.tryParse(value);
-                                      },
-                                    ),
-                                  ),
-
-                                const SizedBox(height: 16),
-                                TextField(
-                                  controller: repeatEndDateController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Repetir hasta (opcional)',
-                                    prefixIcon: Icon(Icons.event_available),
-                                  ),
-                                  readOnly: true,
-                                  onTap: () async {
-                                    final date = await showDatePicker(
-                                      context: context,
-                                      initialDate: DateTime.now(),
-                                      firstDate: DateTime.now(),
-                                      lastDate: DateTime(2100),
-                                    );
-                                    if (date != null) {
-                                      setState(() {
-                                        repeatEndDateController.text =
-                                            "${date.day}/${date.month}/${date.year}";
-                                      });
-                                    }
-                                  },
-                                ),
-
-                                const SizedBox(height: 24),
-                              ],
-                            ),
-                          ),
+                        readOnly: true,
+                        onTap: () async {
+                          final DateTime? picked = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime(2101),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _dateController.text =
+                                  "${picked.day}/${picked.month}/${picked.year}";
+                            });
+                          }
+                        },
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Por favor selecciona una fecha';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _timeController,
+                        decoration: const InputDecoration(
+                          labelText: 'Hora',
+                          suffixIcon: Icon(Icons.access_time),
                         ),
-
-                        // Botones
+                        readOnly: true,
+                        onTap: () async {
+                          final TimeOfDay? picked = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.now(),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _timeController.text =
+                                  "${picked.hour}:${picked.minute.toString().padLeft(2, '0')}";
+                            });
+                          }
+                        },
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Por favor selecciona una hora';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value:
+                            _selectedActivity.isNotEmpty
+                                ? _selectedActivity
+                                : null,
+                        hint: const Text('Seleccionar actividad'),
+                        decoration: const InputDecoration(
+                          labelText: 'Actividad asociada',
+                        ),
+                        items:
+                            activities.isNotEmpty
+                                ? activities.map((activity) {
+                                  return DropdownMenuItem<String>(
+                                    value: activity['id'],
+                                    child: Text(activity['title']),
+                                  );
+                                }).toList()
+                                : [
+                                  const DropdownMenuItem<String>(
+                                    value: '',
+                                    child: Text(
+                                      'No hay actividades disponibles',
+                                    ),
+                                  ),
+                                ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedActivity = value ?? '';
+                          });
+                        },
+                        validator: (value) {
+                          if (activities.isNotEmpty &&
+                              (value == null || value.isEmpty)) {
+                            return 'Por favor selecciona una actividad';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value:
+                            _selectedUserId.isNotEmpty ? _selectedUserId : null,
+                        hint: const Text('Seleccionar usuario'),
+                        decoration: const InputDecoration(
+                          labelText: 'Asignar a usuario',
+                        ),
+                        items:
+                            usuarios.isNotEmpty
+                                ? usuarios.map((user) {
+                                  return DropdownMenuItem<String>(
+                                    value: user['id'],
+                                    child: Text(
+                                      user['nombre'] ?? 'Usuario sin nombre',
+                                    ),
+                                  );
+                                }).toList()
+                                : [
+                                  const DropdownMenuItem<String>(
+                                    value: '',
+                                    child: Text('No hay usuarios disponibles'),
+                                  ),
+                                ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedUserId = value ?? '';
+                          });
+                        },
+                        validator: (value) {
+                          if (usuarios.isNotEmpty &&
+                              (value == null || value.isEmpty)) {
+                            return 'Por favor selecciona un usuario';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        value: _selectedRepeat,
+                        decoration: const InputDecoration(labelText: 'Repetir'),
+                        items: const [
+                          DropdownMenuItem<String>(
+                            value: 'ninguno',
+                            child: Text('No repetir'),
+                          ),
+                          DropdownMenuItem<String>(
+                            value: 'diario',
+                            child: Text('Diario'),
+                          ),
+                          DropdownMenuItem<String>(
+                            value: 'semanal',
+                            child: Text('Semanal'),
+                          ),
+                          DropdownMenuItem<String>(
+                            value: 'mensual',
+                            child: Text('Mensual'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedRepeat = value ?? 'ninguno';
+                          });
+                        },
+                      ),
+                      if (_selectedRepeat != 'ninguno') ...[
+                        const SizedBox(height: 10),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancelar'),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF03d069),
-                                foregroundColor: Colors.black,
+                            Expanded(
+                              child: TextFormField(
+                                decoration: const InputDecoration(
+                                  labelText: 'Intervalo',
+                                ),
+                                keyboardType: TextInputType.number,
+                                initialValue: _repeatInterval.toString(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _repeatInterval = int.tryParse(value) ?? 1;
+                                  });
+                                },
                               ),
-                              onPressed: () async {
-                                if (titleController.text.isNotEmpty &&
-                                    dateController.text.isNotEmpty &&
-                                    timeController.text.isNotEmpty &&
-                                    selectedUserId != null &&
-                                    selectedActivityId != null) {
-                                  // Mostrar indicador de carga mientras se agrega
-                                  showDialog(
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                decoration: const InputDecoration(
+                                  labelText: 'Hasta fecha',
+                                  suffixIcon: Icon(Icons.calendar_today),
+                                ),
+                                readOnly: true,
+                                controller: TextEditingController(
+                                  text: _repeatEndDate,
+                                ),
+                                onTap: () async {
+                                  final DateTime? picked = await showDatePicker(
                                     context: context,
-                                    barrierDismissible: false,
-                                    builder: (BuildContext context) {
-                                      return const Center(
-                                        child: CircularProgressIndicator(
-                                          color: Color(0xFF03d069),
-                                        ),
-                                      );
-                                    },
-                                  );
-
-                                  try {
-                                    // Usar await para la operación asíncrona
-                                    await controller.addRecordatory(
-                                      Recordatory(
-                                        id:
-                                            DateTime.now()
-                                                .millisecondsSinceEpoch,
-                                        title: titleController.text,
-                                        date: dateController.text,
-                                        activityId: selectedActivityId!,
-                                        time: timeController.text,
-                                        userId: selectedUserId!,
-                                        creatorId: '',
-                                        isNotificationEnabled: true,
-                                        repeat: selectedRepeat,
-                                        repeatInterval: repeatInterval ?? 0,
-                                        repeatEndDate:
-                                            repeatEndDateController
-                                                    .text
-                                                    .isNotEmpty
-                                                ? repeatEndDateController.text
-                                                : '',
-                                      ),
-                                    );
-
-                                    // Cerrar el diálogo de carga
-                                    Navigator.pop(context);
-
-                                    // Cerrar el diálogo de agregar recordatorio
-                                    Navigator.pop(context);
-
-                                    // Mostrar mensaje de éxito
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          "Recordatorio guardado correctamente",
-                                        ),
-                                        backgroundColor: Color(0xFF03d069),
-                                      ),
-                                    );
-                                  } catch (e) {
-                                    // Cerrar el diálogo de carga
-                                    Navigator.pop(context);
-
-                                    // Mostrar mensaje de error
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text("Error al guardar: $e"),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        "Por favor completa todos los campos",
-                                      ),
-                                      backgroundColor: Colors.orange,
+                                    initialDate: DateTime.now().add(
+                                      const Duration(days: 30),
                                     ),
+                                    firstDate: DateTime.now(),
+                                    lastDate: DateTime(2101),
                                   );
-                                }
-                              },
-                              child: const Text('Guardar'),
+                                  if (picked != null) {
+                                    setState(() {
+                                      _repeatEndDate =
+                                          "${picked.day}/${picked.month}/${picked.year}";
+                                    });
+                                  }
+                                },
+                              ),
                             ),
                           ],
                         ),
                       ],
-                    ),
+                      const SizedBox(height: 15),
+                      SwitchListTile(
+                        title: const Text('Notificar'),
+                        value: _isNotificationEnabled,
+                        onChanged: (bool value) {
+                          setState(() {
+                            _isNotificationEnabled = value;
+                          });
+                        },
+                      ),
+                    ],
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Cancelar'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (_formKey.currentState!.validate()) {
+                      try {
+                        // Generar un ID único basado en timestamp
+                        final recordatoryId =
+                            DateTime.now().millisecondsSinceEpoch;
+
+                        await controller.addRecordatory(
+                          Recordatory(
+                            id: recordatoryId,
+                            title: _titleController.text,
+                            date: _dateController.text,
+                            time: _timeController.text,
+                            activityId: _selectedActivity,
+                            userId: _selectedUserId,
+                            creatorId: '', // Se asignará en el controlador
+                            isNotificationEnabled: _isNotificationEnabled,
+                            repeat: _selectedRepeat,
+                            repeatInterval: _repeatInterval,
+                            repeatEndDate: _repeatEndDate,
+                          ),
+                        );
+
+                        Navigator.of(context).pop();
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Recordatorio creado con éxito'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } catch (e) {
+                        Navigator.of(context).pop();
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error: ${e.toString()}'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Guardar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

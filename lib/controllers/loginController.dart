@@ -5,6 +5,11 @@ class LoginController {
   static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  // Roles disponibles en la aplicación (como aparecen en Firebase)
+  static const String ROLE_ADMIN = 'admin'; // en firebase: "admin"
+  static const String ROLE_ADULTO = 'Adulto'; // en firebase: "Adulto"
+  static const String ROLE_FAMILIAR = 'Familiar'; // en firebase: "Familiar"
+
   // Método para iniciar sesión
   static Future<Map<String, dynamic>> signIn(
     String email,
@@ -15,15 +20,22 @@ class LoginController {
           .signInWithEmailAndPassword(email: email, password: password);
 
       if (userCredential.user != null) {
+        // Obtener datos del usuario de Firestore
         final userDoc =
             await _db
                 .collection('usuarios')
                 .doc(userCredential.user!.uid)
                 .get();
 
-        final userData = userDoc.data();
-        final userRole =
-            userData?['rol'] ?? 'adulto'; // Asegúrate que el campo sea 'rol'
+        if (!userDoc.exists) {
+          return {
+            'success': false,
+            'message': 'No se encontró información del usuario',
+          };
+        }
+
+        final userData = userDoc.data() as Map<String, dynamic>;
+        final userRole = userData['rol'] ?? ROLE_ADULTO; // Rol por defecto
 
         return {
           'success': true,
@@ -53,6 +65,8 @@ class LoginController {
           message = 'Error al iniciar sesión: ${e.message}';
       }
       return {'success': false, 'message': message};
+    } catch (e) {
+      return {'success': false, 'message': 'Error inesperado: $e'};
     }
   }
 
@@ -65,6 +79,25 @@ class LoginController {
     }
   }
 
+  // Método para verificar el rol del usuario actual
+  static Future<String> getCurrentUserRole() async {
+    try {
+      User? currentUser = _auth.currentUser;
+      if (currentUser == null) return '';
+
+      DocumentSnapshot userDoc =
+          await _db.collection('usuarios').doc(currentUser.uid).get();
+
+      if (!userDoc.exists) return '';
+
+      Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+      return userData['rol'] ?? ROLE_ADULTO;
+    } catch (e) {
+      print('Error al obtener el rol del usuario: $e');
+      return '';
+    }
+  }
+
   // Método para verificar si hay un usuario autenticado
   static User? getCurrentUser() {
     return _auth.currentUser;
@@ -73,5 +106,41 @@ class LoginController {
   // Método para obtener el estado de autenticación
   static Stream<User?> authStateChanges() {
     return _auth.authStateChanges();
+  }
+
+  // Método para verificar si un rol coincide con otro (insensible a mayúsculas/minúsculas)
+  static bool matchesRole(String userRole, String expectedRole) {
+    return userRole.toLowerCase() == expectedRole.toLowerCase();
+  }
+
+  // Método para verificar si el usuario es administrador
+  static bool isAdmin(String role) {
+    return matchesRole(role, ROLE_ADMIN);
+  }
+
+  // Método para verificar si el usuario es adulto
+  static bool isAdulto(String role) {
+    return matchesRole(role, ROLE_ADULTO);
+  }
+
+  // Método para verificar si el usuario es familiar
+  static bool isFamiliar(String role) {
+    return matchesRole(role, ROLE_FAMILIAR);
+  }
+
+  // Método para obtener la ruta correspondiente según el rol
+  static String getRouteByRole(String role) {
+    // Normalizamos el rol para hacer la comparación insensible a mayúsculas/minúsculas
+    String normalizedRole = role.toLowerCase();
+
+    if (normalizedRole == ROLE_ADMIN.toLowerCase()) {
+      return '/homePage';
+    } else if (normalizedRole == ROLE_FAMILIAR.toLowerCase()) {
+      return '/familiarHome';
+    } else if (normalizedRole == ROLE_ADULTO.toLowerCase()) {
+      return '/adultHome';
+    } else {
+      return '/adultHome'; // Ruta por defecto
+    }
   }
 }

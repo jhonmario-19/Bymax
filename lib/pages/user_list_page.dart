@@ -41,24 +41,6 @@ class _UserListPageState extends State<UserListPage> {
     });
 
     try {
-      bool isAdmin = await _controller.verifyAdminAccess();
-      if (!isAdmin && mounted) {
-        setState(() {
-          _isLoading = false;
-          _errorMessage = 'No tienes permisos de administrador';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No tienes permisos de administrador'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        Future.delayed(const Duration(seconds: 2), () {
-          Navigator.pushReplacementNamed(context, '/homePage');
-        });
-        return;
-      }
-
       final result = await _controller.loadUsersAndFamilies();
 
       if (!mounted) return;
@@ -94,12 +76,6 @@ class _UserListPageState extends State<UserListPage> {
           backgroundColor: Colors.red,
         ),
       );
-
-      if (e.toString().contains("No tienes permisos")) {
-        Future.delayed(const Duration(seconds: 2), () {
-          Navigator.pushReplacementNamed(context, '/homePage');
-        });
-      }
     }
   }
 

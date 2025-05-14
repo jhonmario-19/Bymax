@@ -14,6 +14,7 @@ import 'package:bymax/pages/AdultHomePage.dart';
 import 'package:bymax/controllers/recordatoryController.dart';
 import 'package:bymax/services/notification_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:bymax/pages/familiarHomePage.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -137,6 +138,7 @@ class MyApp extends StatelessWidget {
         '/addUser': (context) => const AddUserPage(),
         '/activities': (context) => const ActivitiesPage(),
         '/userList': (context) => const UserListPage(),
+        '/familiarHome': (context) => const FamiliarHomePage(),
         '/adultHome':
             (context) => ChangeNotifierProvider(
               create: (_) => RecordatoryController(),

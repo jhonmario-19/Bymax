@@ -173,28 +173,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // Función para verificar el rol del usuario después de iniciar sesión
-  Future<Map<String, dynamic>> _checkUserRole(User user) async {
-    try {
-      DocumentSnapshot userDoc =
-          await FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(user.uid)
-              .get();
-
-      Map<String, dynamic>? userData = userDoc.data() as Map<String, dynamic>?;
-
-      if (userData != null && userData['rol'] == 'admin') {
-        return {'isAdmin': true, 'userData': userData};
-      } else {
-        return {'isAdmin': false, 'userData': userData};
-      }
-    } catch (e) {
-      print('Error al verificar el rol del usuario: $e');
-      return {'isAdmin': false, 'error': 'Error al verificar el rol: $e'};
-    }
-  }
-
   Future<void> _handleLogin() async {
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.trim().isEmpty) {
@@ -206,72 +184,41 @@ class _LoginPageState extends State<LoginPage> {
       );
       return;
     }
-
     setState(() {
       _isLoading = true;
     });
-
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
-
       final result = await LoginController.signIn(email, password);
-
       if (!mounted) return;
-
       if (result['success'] == true) {
-        // Verificar el rol del usuario
-        final User? user = result['user'];
-        if (user != null) {
-          final roleInfo = await _checkUserRole(user);
+        // Guardar las credenciales si se seleccionó "Recordarme"
+        await _saveCredentials(email, password);
+        // Guardar información del rol en SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        final String role = result['role'] ?? LoginController.ROLE_ADULTO;
+        await prefs.setString('user_role', role);
 
-          // Guardar las credenciales si se seleccionó "Recordarme"
-          await _saveCredentials(email, password);
+        // Guardar información de admin usando el método isAdmin del LoginController
+        final bool isAdmin = LoginController.isAdmin(role);
+        await prefs.setBool('is_admin', isAdmin);
 
-          // Guardar información del rol en SharedPreferences
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('is_admin', roleInfo['isAdmin'] ?? false);
-
-          // Guardar el nombre del usuario
-          if (roleInfo['userData'] != null) {
-            // Guardar el nombre del usuario en SharedPreferences
-            final String userName = roleInfo['userData']['nombre'] ?? 'Usuario';
-            await prefs.setString('user_name', userName);
-          }
-
-          setState(() {
-            _isLoading = false;
-          });
-
-          // Redirigir según el rol
-          final userData = roleInfo['userData'];
-          final String rol = userData?['rol'] ?? 'adulto';
-          // Redirigir a homePage para todos los usuarios
-          if (rol == 'adulto') {
-            Navigator.pushReplacementNamed(context, '/adultHome');
-          } else if (rol == 'admin') {
-            Navigator.pushReplacementNamed(context, '/homePage');
-          } else {
-            // Otros roles o página por defecto
-            Navigator.pushReplacementNamed(context, '/adultHome');
-          }
-        } else {
-          setState(() {
-            _isLoading = false;
-          });
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Error al obtener información del usuario'),
-              backgroundColor: Colors.red,
-            ),
-          );
+        // Guardar el nombre del usuario
+        if (result['userData'] != null) {
+          final String userName = result['userData']['nombre'] ?? 'Usuario';
+          await prefs.setString('user_name', userName);
         }
+        setState(() {
+          _isLoading = false;
+        });
+        // Redirigir según el rol usando el método getRouteByRole
+        final String routeName = LoginController.getRouteByRole(role);
+        Navigator.pushReplacementNamed(context, routeName);
       } else {
         setState(() {
           _isLoading = false;
         });
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result['message'] ?? 'Error al iniciar sesión'),
@@ -284,7 +231,6 @@ class _LoginPageState extends State<LoginPage> {
       setState(() {
         _isLoading = false;
       });
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error inesperado: $e'),

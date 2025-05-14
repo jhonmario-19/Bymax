@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // Añadida importación para notificaciones
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../controllers/recordatoryController.dart';
 import '../controllers/loginController.dart';
-import '../models/recordatoryModel.dart'; // Asegúrate de que esta importación sea correcta para tu Recordatory
-import '../services/tts_service.dart'; // Importación del servicio TTS
+import '../models/recordatoryModel.dart';
+import '../services/tts_service.dart';
 
 class AdultHomePages extends StatefulWidget {
   const AdultHomePages({Key? key}) : super(key: key);
@@ -19,30 +19,37 @@ class _AdultHomePageState extends State<AdultHomePages> {
   String? userName;
   bool _loadingUser = true;
   final ScrollController _scrollController = ScrollController();
-  final TTSService _ttsService = TTSService(); // Instancia del servicio TTS
-  int?
-  _speakingRecordatoryId; // Para saber cuál recordatorio se está reproduciendo
+  final TTSService _ttsService = TTSService();
+  int? _speakingRecordatoryId;
+  bool _isInitialized = false; // Bandera para controlar la inicialización
 
   @override
   void initState() {
     super.initState();
-    _loadUserInfo();
-    _initializeTTS(); // Inicializar el servicio TTS
-    _configureNotifications(); // Añadido para configurar las notificaciones
+    // No cargar datos aquí directamente, solo inicializar TTS
+    _initializeTTS();
+    _configureNotifications();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Cargar datos solo una vez después de que el contexto esté disponible
+    if (!_isInitialized) {
+      _loadUserInfo();
+      _isInitialized = true;
+    }
   }
 
   // Configurar permisos de notificaciones
   Future<void> _configureNotifications() async {
-    // Solicitar permiso para notificaciones
     await FirebaseMessaging.instance.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
 
-    // Configurar manejo de notificaciones cuando la app está en segundo plano
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      // Actualizar la interfaz cuando se abre la app desde una notificación
       setState(() {});
     });
   }
@@ -55,28 +62,47 @@ class _AdultHomePageState extends State<AdultHomePages> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _ttsService.dispose(); // Liberar recursos del TTS al cerrar
+    _ttsService.dispose();
     super.dispose();
   }
 
   Future<void> _loadUserInfo() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      // Trae el nombre desde Firestore
-      final userDoc =
-          await FirebaseFirestore.instance
-              .collection('usuarios')
-              .doc(user.uid)
-              .get();
-      setState(() {
-        userName = userDoc.data()?['nombre'] ?? 'Usuario';
-        _loadingUser = false;
-      });
-      // Carga los recordatorios asignados a este usuario
-      await Provider.of<RecordatoryController>(
-        context,
-        listen: false,
-      ).fetchRecordatoriesForUser(user.uid);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        // Trae el nombre desde Firestore
+        final userDoc =
+            await FirebaseFirestore.instance
+                .collection('usuarios')
+                .doc(user.uid)
+                .get();
+
+        if (mounted) {
+          // Comprobar si el widget sigue montado
+          setState(() {
+            userName = userDoc.data()?['nombre'] ?? 'Usuario';
+            _loadingUser = false;
+          });
+
+          // Carga los recordatorios asignados a este usuario SOLO UNA VEZ
+          await Provider.of<RecordatoryController>(
+            context,
+            listen: false,
+          ).fetchRecordatoriesForUser(user.uid);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingUser = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar datos: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -109,14 +135,22 @@ class _AdultHomePageState extends State<AdultHomePages> {
 
     // Cuando termina de hablar, actualizar el estado
     if (!_ttsService.isSpeaking) {
-      setState(() {
-        _speakingRecordatoryId = null;
-      });
+      if (mounted) {
+        setState(() {
+          _speakingRecordatoryId = null;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Prevenir cambios no deseados al RecordatoryController dentro de build
+    final recordatoryController = Provider.of<RecordatoryController>(
+      context,
+      listen: true,
+    );
+
     return Scaffold(
       bottomNavigationBar: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -248,9 +282,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
                             backgroundColor: Colors.white,
                             child: Icon(Icons.person, color: Color(0xFF03d069)),
                           ),
-                          const SizedBox(
-                            width: 10,
-                          ), // Espacio entre avatar y texto
+                          const SizedBox(width: 10),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -284,14 +316,14 @@ class _AdultHomePageState extends State<AdultHomePages> {
                   color: Colors.white,
                   borderRadius: BorderRadius.vertical(
                     top: Radius.circular(20),
-                    bottom: Radius.zero, // Sin bordes redondeados abajo
+                    bottom: Radius.zero,
                   ),
                   image: DecorationImage(
                     image: AssetImage('lib/pages/images/patron_homePage.jpg'),
                     fit: BoxFit.cover,
                     colorFilter: ColorFilter.mode(
                       Color.fromARGB(211, 200, 193, 193),
-                      BlendMode.darken, // Modo de mezcla
+                      BlendMode.darken,
                     ),
                   ),
                 ),
@@ -320,7 +352,6 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                 color: Colors.black,
                               ),
                             ),
-                            // Agregar un tooltip para indicar que se puede pulsar para escuchar
                             Tooltip(
                               message:
                                   'Pulsa en un recordatorio para escucharlo',
@@ -333,46 +364,42 @@ class _AdultHomePageState extends State<AdultHomePages> {
                           ],
                         ),
                         const SizedBox(height: 15),
-                        // Lista de recordatorios
-                        Consumer<RecordatoryController>(
-                          builder: (context, controller, child) {
-                            if (controller.isLoading) {
-                              return const Center(
-                                child: CircularProgressIndicator(
-                                  color: Color(0xFF03d069),
-                                ),
-                              );
-                            }
-                            final recordatories = controller.recordatories;
-                            if (recordatories.isEmpty) {
-                              return Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.notifications_off,
-                                      size: 64,
-                                      color: Colors.grey[400],
+                        // Lista de recordatorios con un contenedor que evite reconstrucción innecesaria
+                        recordatoryController.isLoading
+                            ? const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFF03d069),
+                              ),
+                            )
+                            : recordatoryController.recordatories.isEmpty
+                            ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.notifications_off,
+                                    size: 64,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'No tienes recordatorios asignados',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      color: Colors.grey,
                                     ),
-                                    const SizedBox(height: 16),
-                                    const Text(
-                                      'No tienes recordatorios asignados',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                            return ListView.builder(
+                                  ),
+                                ],
+                              ),
+                            )
+                            : ListView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
-                              itemCount: recordatories.length,
+                              itemCount:
+                                  recordatoryController.recordatories.length,
                               itemBuilder: (context, index) {
-                                final rec = recordatories[index];
-                                // Verificar si este recordatorio se está reproduciendo
+                                final rec =
+                                    recordatoryController.recordatories[index];
                                 final isSpeaking =
                                     _speakingRecordatoryId == rec.id;
                                 final isUnread = !rec.isRead;
@@ -383,12 +410,9 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  // Destacar el card según estado de lectura/reproducción
                                   color:
                                       isUnread
-                                          ? const Color(
-                                            0xFFFFF9C4,
-                                          ) // Amarillo claro para no leídos
+                                          ? const Color(0xFFFFF9C4)
                                           : (isSpeaking
                                               ? const Color(0xFFE1F5FE)
                                               : Colors.white),
@@ -396,10 +420,8 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                     onTap: () {
                                       // Si no está leído, marcarlo como leído
                                       if (isUnread) {
-                                        Provider.of<RecordatoryController>(
-                                          context,
-                                          listen: false,
-                                        ).markRecordatoryAsRead(rec.id);
+                                        recordatoryController
+                                            .markRecordatoryAsRead(rec.id);
                                       }
                                       _speakRecordatory(rec);
                                     },
@@ -481,7 +503,6 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                                     Icons.volume_up_outlined,
                                                   ),
                                         ),
-                                        // Mostrar una indicación visual de que se puede tocar
                                         if (!isSpeaking)
                                           Positioned(
                                             right: 12,
@@ -495,7 +516,6 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                               ),
                                             ),
                                           ),
-                                        // Añadir indicador de no leído
                                         if (isUnread)
                                           Positioned(
                                             right: 10,
@@ -514,9 +534,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                   ),
                                 );
                               },
-                            );
-                          },
-                        ),
+                            ),
                         const SizedBox(height: 20),
                       ],
                     ),
