@@ -17,6 +17,7 @@ class _UserListPageState extends State<UserListPage> {
   List<Map<String, dynamic>> _usuarios = [];
   Map<String, String> _familias = {};
   bool _isLoading = true;
+  bool _isFamiliar = false;
   String _errorMessage = '';
   String _filterRole = 'Todos';
 
@@ -24,12 +25,28 @@ class _UserListPageState extends State<UserListPage> {
   void initState() {
     super.initState();
     _loadUsuariosYFamilias();
+    _checkUserRole();
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkUserRole() async {
+    final userInfo = await _controller.getCurrentUserInfo();
+    if (userInfo['success']) {
+      setState(() {
+        _isFamiliar = userInfo['rol'] == 'Familiar';
+      });
+
+      // Redirigir basado en el rol
+      if (!mounted) return;
+      if (userInfo['rol'] == 'Familiar') {
+        Navigator.pushReplacementNamed(context, '/familiarHomePage');
+      }
+    }
   }
 
   Future<void> _loadUsuariosYFamilias() async {
@@ -302,28 +319,33 @@ class _UserListPageState extends State<UserListPage> {
         elevation: 4,
         child: const Icon(Icons.refresh, color: Colors.white),
       ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFF03d069),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildNavBarItem(Icons.home, 0),
-            _buildNavBarItem(Icons.add, 1),
-            _buildNavBarItem(Icons.settings, 2),
-            _buildNavBarItem(Icons.logout, 3),
-          ],
-        ),
-      ),
+
+      // Mostrar la barra de navegación solo si no es Familiar
+      bottomNavigationBar:
+          !_isFamiliar
+              ? Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF03d069),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildNavBarItem(Icons.home, 0),
+                    _buildNavBarItem(Icons.add, 1),
+                    _buildNavBarItem(Icons.settings, 2),
+                    _buildNavBarItem(Icons.logout, 3),
+                  ],
+                ),
+              )
+              : null,
       body: Container(
         width: double.infinity,
         color: const Color(0xFF03d069),
@@ -352,7 +374,10 @@ class _UserListPageState extends State<UserListPage> {
                           size: 28,
                         ),
                         onPressed: () {
-                          Navigator.pushReplacementNamed(context, '/homePage');
+                          Navigator.pushReplacementNamed(
+                            context,
+                            _isFamiliar ? '/familiarHome' : '/homePage',
+                          );
                         },
                         padding: EdgeInsets.zero,
                         alignment: Alignment.centerLeft,
@@ -773,10 +798,15 @@ class _UserListPageState extends State<UserListPage> {
         if (_selectedIndex == index) {
           switch (index) {
             case 0:
-              Navigator.pushReplacementNamed(context, '/homePage');
+              Navigator.pushReplacementNamed(
+                context,
+                _isFamiliar ? '/familiarHomePage' : '/homePage',
+              );
               break;
             case 1:
-              Navigator.pushReplacementNamed(context, '/addUser');
+              if (!_isFamiliar) {
+                Navigator.pushReplacementNamed(context, '/addUser');
+              }
               break;
             case 2:
               Navigator.pushReplacementNamed(context, '/settings');

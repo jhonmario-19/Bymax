@@ -169,8 +169,6 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
                                             icon: Icons.event_note,
                                             title: activity.title,
                                             description: activity.description,
-                                            duration: activity.date,
-                                            time: activity.time,
                                             onDelete: () async {
                                               await controller.deleteActivity(
                                                 activity.id,
@@ -221,8 +219,6 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
     required IconData icon,
     required String title,
     required String description,
-    required String duration,
-    required String time,
     required VoidCallback onDelete,
   }) {
     return Container(
@@ -259,23 +255,6 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
                     description,
                     style: const TextStyle(fontSize: 13, color: Colors.black54),
                   ),
-                Row(
-                  children: [
-                    Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      duration,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.schedule, size: 12, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      time,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -291,8 +270,6 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
   void _showAddActivityDialog(BuildContext context) {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
-    final dateController = TextEditingController();
-    final timeController = TextEditingController();
 
     showDialog(
       context: context,
@@ -312,39 +289,6 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
                     controller: descriptionController,
                     decoration: const InputDecoration(labelText: 'Descripción'),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: dateController,
-                    decoration: const InputDecoration(labelText: 'Fecha'),
-                    readOnly: true,
-                    onTap: () async {
-                      final date = await showDatePicker(
-                        context: dialogContext,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2100),
-                      );
-                      if (date != null) {
-                        dateController.text =
-                            "${date.day}/${date.month}/${date.year}";
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: timeController,
-                    decoration: const InputDecoration(labelText: 'Hora'),
-                    readOnly: true,
-                    onTap: () async {
-                      final time = await showTimePicker(
-                        context: dialogContext,
-                        initialTime: TimeOfDay.now(),
-                      );
-                      if (time != null) {
-                        timeController.text = time.format(dialogContext);
-                      }
-                    },
-                  ),
                 ],
               ),
             ),
@@ -355,16 +299,12 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
               ),
               TextButton(
                 onPressed: () async {
-                  if (titleController.text.isNotEmpty &&
-                      dateController.text.isNotEmpty &&
-                      timeController.text.isNotEmpty) {
+                  if (titleController.text.isNotEmpty) {
                     try {
                       final activity = Activity(
                         id: '', // Se asigna en Firestore
                         title: titleController.text,
                         description: descriptionController.text,
-                        date: dateController.text,
-                        time: timeController.text,
                         userId: '', // Se asigna en el controlador
                       );
 
@@ -401,7 +341,7 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Completa todos los campos obligatorios'),
+                        content: Text('Completa el título para continuar'),
                         backgroundColor: Colors.orange,
                       ),
                     );

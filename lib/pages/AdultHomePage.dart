@@ -7,6 +7,7 @@ import '../controllers/recordatoryController.dart';
 import '../controllers/loginController.dart';
 import '../models/recordatoryModel.dart';
 import '../services/tts_service.dart';
+import '../services/notification_service.dart';
 
 class AdultHomePages extends StatefulWidget {
   const AdultHomePages({Key? key}) : super(key: key);
@@ -22,13 +23,15 @@ class _AdultHomePageState extends State<AdultHomePages> {
   final TTSService _ttsService = TTSService();
   int? _speakingRecordatoryId;
   bool _isInitialized = false; // Bandera para controlar la inicialización
+  String? _debugUserId; // Para depuración
+  final NotificationService _notificationService = NotificationService();
 
   @override
   void initState() {
     super.initState();
-    // No cargar datos aquí directamente, solo inicializar TTS
     _initializeTTS();
     _configureNotifications();
+    _initLocalNotifications();
   }
 
   @override
@@ -39,6 +42,10 @@ class _AdultHomePageState extends State<AdultHomePages> {
       _loadUserInfo();
       _isInitialized = true;
     }
+  }
+
+  Future<void> _initLocalNotifications() async {
+    await _notificationService.init();
   }
 
   // Configurar permisos de notificaciones
@@ -70,6 +77,9 @@ class _AdultHomePageState extends State<AdultHomePages> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
+        _debugUserId = user.uid; // Guardar para depuración
+        print('ID del usuario actual: ${user.uid}'); // Depuración
+
         // Trae el nombre desde Firestore
         final userDoc =
             await FirebaseFirestore.instance
@@ -85,13 +95,24 @@ class _AdultHomePageState extends State<AdultHomePages> {
           });
 
           // Carga los recordatorios asignados a este usuario SOLO UNA VEZ
-          await Provider.of<RecordatoryController>(
+          final recordatoryController = Provider.of<RecordatoryController>(
             context,
             listen: false,
-          ).fetchRecordatoriesForUser(user.uid);
+          );
+
+          // Depuración - verifica si hay recordatorios para este usuario
+          print('Cargando recordatorios para usuario: ${user.uid}');
+
+          // Primero intentar obtener recordatorios donde el usuario es el destinatario
+          await recordatoryController.fetchRecordatoriesForUser(user.uid);
+
+          print(
+            'Número de recordatorios cargados: ${recordatoryController.recordatories.length}',
+          );
         }
       }
     } catch (e) {
+      print('Error al cargar datos: $e');
       if (mounted) {
         setState(() {
           _loadingUser = false;
@@ -103,6 +124,36 @@ class _AdultHomePageState extends State<AdultHomePages> {
           ),
         );
       }
+    }
+  }
+
+  // Método para forzar recarga de recordatorios (útil para depuración)
+  Future<void> _refreshRecordatorios() async {
+    try {
+      setState(() {
+        _loadingUser = true;
+      });
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final recordatoryController = Provider.of<RecordatoryController>(
+          context,
+          listen: false,
+        );
+
+        // Intentar ambos métodos para encontrar recordatorios
+        await recordatoryController.fetchRecordatoriesForUser(user.uid);
+        await recordatoryController.rescheduleAllNotifications();
+      }
+
+      setState(() {
+        _loadingUser = false;
+      });
+    } catch (e) {
+      print('Error al recargar recordatorios: $e');
+      setState(() {
+        _loadingUser = false;
+      });
     }
   }
 
@@ -141,6 +192,78 @@ class _AdultHomePageState extends State<AdultHomePages> {
         });
       }
     }
+  }
+
+  void _handleNotificationTap(int recordatoryId) {
+    // Buscar el recordatorio en la lista
+    final recordatoryController = Provider.of<RecordatoryController>(
+      context,
+      listen: false,
+    );
+
+    final recordatory = recordatoryController.recordatories.firstWhere(
+      (r) => r.id == recordatoryId,
+      orElse:
+          () => Recordatory(
+            id: -1,
+            title: '',
+            date: '',
+            time: '',
+            activityId: '',
+            userId: '',
+            creatorId: '',
+          ),
+    );
+
+    if (recordatory.id != -1) {
+      // Marcar como leído y reproducir audio
+      recordatoryController.markRecordatoryAsRead(recordatory.id);
+      _speakRecordatory(recordatory);
+
+      // Opcional: desplazar hasta el recordatorio en la lista
+      final index = recordatoryController.recordatories.indexOf(recordatory);
+      if (index != -1) {
+        // Calcular la posición aproximada
+        final scrollOffset =
+            index * 100.0; // Ajusta según la altura del elemento
+
+        // Desplazar con animación
+        _scrollController.animateTo(
+          scrollOffset,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    }
+  }
+
+  void _setupForegroundNotificationHandling() {
+    // Escuchar notificaciones cuando la app está en primer plano
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      // Refrescar la lista de recordatorios
+      _refreshRecordatorios();
+
+      // Opcional: mostrar un mensaje en la UI
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Nuevo recordatorio recibido: ${message.notification?.title ?? ""}',
+          ),
+          action: SnackBarAction(
+            label: 'Ver',
+            onPressed: () {
+              // Intentar extraer el ID del recordatorio
+              final recordatoryId = int.tryParse(
+                message.data['recordatoryId'] ?? '',
+              );
+              if (recordatoryId != null) {
+                _handleNotificationTap(recordatoryId);
+              }
+            },
+          ),
+        ),
+      );
+    });
   }
 
   @override
@@ -352,14 +475,28 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                 color: Colors.black,
                               ),
                             ),
-                            Tooltip(
-                              message:
-                                  'Pulsa en un recordatorio para escucharlo',
-                              child: Icon(
-                                Icons.volume_up,
-                                color: Colors.grey[600],
-                                size: 24,
-                              ),
+                            Row(
+                              children: [
+                                // Botón de actualizar
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.refresh,
+                                    color: Colors.grey[600],
+                                  ),
+                                  onPressed: _refreshRecordatorios,
+                                  tooltip: 'Actualizar recordatorios',
+                                ),
+                                const SizedBox(width: 8),
+                                Tooltip(
+                                  message:
+                                      'Pulsa en un recordatorio para escucharlo',
+                                  child: Icon(
+                                    Icons.volume_up,
+                                    color: Colors.grey[600],
+                                    size: 24,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -389,6 +526,16 @@ class _AdultHomePageState extends State<AdultHomePages> {
                                       color: Colors.grey,
                                     ),
                                   ),
+                                  const SizedBox(height: 16),
+                                  // Mostrar información de depuración en modo desarrollo
+                                  if (_debugUserId != null)
+                                    Text(
+                                      'ID usuario: $_debugUserId',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
                                 ],
                               ),
                             )

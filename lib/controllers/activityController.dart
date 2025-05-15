@@ -43,8 +43,6 @@ class ActivityController extends ChangeNotifier {
               'id': doc.id,
               'title': data['title'],
               'description': data['description'] ?? '',
-              'date': data['date'] ?? '',
-              'time': data['time'] ?? '',
               'userId': data['userId'] ?? '',
             });
           }).toList();
@@ -74,8 +72,6 @@ class ActivityController extends ChangeNotifier {
       final activityData = {
         'title': activity.title,
         'description': activity.description,
-        'date': activity.date,
-        'time': activity.time,
         'userId': currentUser.uid,
       };
 

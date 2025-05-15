@@ -343,7 +343,7 @@ class _FamiliarHomePageState extends State<FamiliarHomePage> {
               break;
             case 2:
               // Ir al perfil
-              Navigator.pushNamed(context, '/profile');
+              Navigator.pushNamed(context, '/userList');
               break;
             case 3:
               try {

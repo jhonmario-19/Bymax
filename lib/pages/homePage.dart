@@ -235,15 +235,6 @@ class _homePageState extends State<homePage> {
                     ),
                     child: Column(
                       children: [
-                        // Asistente IA - botón vertical
-                        _buildMenuItemVertical(
-                          icon: Icons.mic,
-                          label: 'Asistente IA',
-                          color: Colors.blue,
-                          textColor: Colors.black,
-                        ),
-                        const SizedBox(height: 15),
-
                         // Recordatorios - botón vertical
                         _buildMenuItemVertical(
                           icon: Icons.notifications_active,

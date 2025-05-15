@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../models/recordatoryModel.dart';
 import '../controllers/UserController.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import '../services/notification_service.dart';
 
 class RecordatoryController extends ChangeNotifier {
   List<Recordatory> _recordatories = [];
@@ -20,6 +21,7 @@ class RecordatoryController extends ChangeNotifier {
   String? _currentUserCreator;
   String? _currentUserFamilyId;
   String? get currentUserRole => _currentUserRole;
+  final NotificationService _notificationService = NotificationService();
   // Getters
   List<Recordatory> get recordatories => _recordatories;
   List<Map<String, dynamic>> get users => _users;
@@ -32,7 +34,18 @@ class RecordatoryController extends ChangeNotifier {
       _fetchRecordatories();
       _fetchUsers();
       _initializeFCM();
+      _initNotifications();
     });
+  }
+
+  // Nuevo método para inicializar notificaciones
+  Future<void> _initNotifications() async {
+    await _notificationService.init();
+
+    // Programar notificaciones para recordatorios existentes
+    if (_recordatories.isNotEmpty) {
+      await _notificationService.scheduleAllNotifications(_recordatories);
+    }
   }
 
   // Configurar FCM
@@ -91,6 +104,53 @@ class RecordatoryController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _loadRecordatoryCreators() async {
+    try {
+      if (_recordatories.isEmpty) return;
+
+      // Recopilar todos los IDs de creadores que no son el usuario actual
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+      if (currentUserId == null) return;
+
+      Set<String> creatorIds = {};
+      for (var recordatory in _recordatories) {
+        if (recordatory.creatorId != currentUserId &&
+            !_users.any((user) => user['id'] == recordatory.creatorId)) {
+          creatorIds.add(recordatory.creatorId);
+        }
+      }
+
+      // Si no hay creadores externos, terminar
+      if (creatorIds.isEmpty) return;
+
+      // Cargar información de estos usuarios
+      for (String creatorId in creatorIds) {
+        try {
+          DocumentSnapshot creatorDoc =
+              await _firestore.collection('usuarios').doc(creatorId).get();
+
+          if (creatorDoc.exists) {
+            Map<String, dynamic> creatorData =
+                creatorDoc.data() as Map<String, dynamic>;
+            creatorData['id'] = creatorId;
+
+            // Añadir a la lista si no existe ya
+            if (!_users.any((user) => user['id'] == creatorId)) {
+              _users.add(creatorData);
+            }
+          }
+        } catch (e) {
+          print('Error al cargar información del creador $creatorId: $e');
+        }
+      }
+
+      // Notificar cambios
+      notifyListeners();
+    } catch (e) {
+      print('Error al cargar creadores de recordatorios: $e');
+    }
+  }
+
   Future<void> _fetchRecordatories() async {
     try {
       // Si ya hay una carga en progreso, no continuar
@@ -107,14 +167,17 @@ class RecordatoryController extends ChangeNotifier {
         return;
       }
 
-      // Obtener recordatorios donde el usuario actual es el creador
+      // Lista para almacenar todos los recordatorios
+      List<Recordatory> allRecordatories = [];
+
+      // 1. Obtener recordatorios donde el usuario actual es el creador
       final querySnapshot =
           await _firestore
               .collection(_collectionName)
               .where('creatorId', isEqualTo: currentUser.uid)
               .get();
 
-      _recordatories =
+      allRecordatories =
           querySnapshot.docs.map((doc) {
             final data = doc.data();
             return Recordatory.fromMap({
@@ -132,6 +195,121 @@ class RecordatoryController extends ChangeNotifier {
             });
           }).toList();
 
+      // 2. Si el usuario es admin, también obtener recordatorios creados por usuarios
+      // que él creó (familiares)
+      if (_currentUserRole == 'admin') {
+        try {
+          // Primero obtenemos los IDs de los usuarios creados por el admin
+          final usersCreatedQuery =
+              await _firestore
+                  .collection('usuarios')
+                  .where('createdBy', isEqualTo: currentUser.uid)
+                  .get();
+
+          List<String> familiarIds = [];
+
+          // Filtramos para obtener solo los usuarios con rol 'Familiar'
+          for (var userDoc in usersCreatedQuery.docs) {
+            Map<String, dynamic> userData =
+                userDoc.data() as Map<String, dynamic>;
+            if (userData['rol']?.toString() == 'Familiar') {
+              familiarIds.add(userDoc.id);
+            }
+          }
+
+          // Si hay familiares, buscar recordatorios creados por ellos
+          if (familiarIds.isNotEmpty) {
+            // No podemos usar 'whereIn' si la lista tiene más de 10 elementos
+            if (familiarIds.length <= 10) {
+              final familiarRecordatoriesQuery =
+                  await _firestore
+                      .collection(_collectionName)
+                      .where('creatorId', whereIn: familiarIds)
+                      .get();
+
+              // Agregar estos recordatorios a la lista
+              final familiarRecordatories =
+                  familiarRecordatoriesQuery.docs.map((doc) {
+                    final data = doc.data();
+                    return Recordatory.fromMap({
+                      'id': int.parse(doc.id),
+                      'title': data['title'],
+                      'date': data['date'],
+                      'activityId': data['activityId'],
+                      'time': data['time'] ?? '',
+                      'userId': data['userId'],
+                      'creatorId': data['creatorId'],
+                      'isNotificationEnabled':
+                          data['isNotificationEnabled'] ?? false,
+                      'repeat': data['repeat'] ?? 'ninguno',
+                      'repeatInterval': data['repeatInterval'],
+                      'repeatEndDate': data['repeatEndDate'],
+                    });
+                  }).toList();
+
+              allRecordatories.addAll(familiarRecordatories);
+            } else {
+              // Si hay más de 10 familiares, hacemos consultas individuales
+              for (String familiarId in familiarIds) {
+                final familiarRecordatoriesQuery =
+                    await _firestore
+                        .collection(_collectionName)
+                        .where('creatorId', isEqualTo: familiarId)
+                        .get();
+
+                // Agregar estos recordatorios a la lista
+                final familiarRecordatories =
+                    familiarRecordatoriesQuery.docs.map((doc) {
+                      final data = doc.data();
+                      return Recordatory.fromMap({
+                        'id': int.parse(doc.id),
+                        'title': data['title'],
+                        'date': data['date'],
+                        'activityId': data['activityId'],
+                        'time': data['time'] ?? '',
+                        'userId': data['userId'],
+                        'creatorId': data['creatorId'],
+                        'isNotificationEnabled':
+                            data['isNotificationEnabled'] ?? false,
+                        'repeat': data['repeat'] ?? 'ninguno',
+                        'repeatInterval': data['repeatInterval'],
+                        'repeatEndDate': data['repeatEndDate'],
+                      });
+                    }).toList();
+
+                allRecordatories.addAll(familiarRecordatories);
+              }
+            }
+          }
+        } catch (e) {
+          print('Error al cargar recordatorios de familiares: $e');
+        }
+      }
+
+      // Ordenar todos los recordatorios por fecha (más recientes primero)
+      allRecordatories.sort((a, b) {
+        // Convertir las fechas (formato dd/mm/yyyy) para comparación
+        List<String> partsA = a.date.split('/');
+        List<String> partsB = b.date.split('/');
+
+        if (partsA.length == 3 && partsB.length == 3) {
+          DateTime dateA = DateTime(
+            int.parse(partsA[2]),
+            int.parse(partsA[1]),
+            int.parse(partsA[0]),
+          );
+          DateTime dateB = DateTime(
+            int.parse(partsB[2]),
+            int.parse(partsB[1]),
+            int.parse(partsB[0]),
+          );
+          return dateB.compareTo(dateA); // Orden descendente
+        }
+        return 0;
+      });
+
+      _recordatories = allRecordatories;
+      await _loadRecordatoryCreators();
       _initialLoadComplete = true;
       _isLoading = false;
       notifyListeners();
@@ -426,6 +604,9 @@ class RecordatoryController extends ChangeNotifier {
 
       // Actualizar lista local
       _recordatories.add(recordatoryWithCreator);
+      if (recordatoryWithCreator.isNotificationEnabled) {
+        await _notificationService.scheduleNotification(recordatoryWithCreator);
+      }
 
       // Verificar si el usuario destinatario es diferente del creador
       if (recordatory.userId != currentUser.uid) {
@@ -527,7 +708,7 @@ class RecordatoryController extends ChangeNotifier {
     try {
       _isLoading = true;
       notifyListeners();
-
+      await _notificationService.cancelNotification(id);
       // Primero eliminar de Firestore
       await _firestore.collection(_collectionName).doc(id.toString()).delete();
 
@@ -544,7 +725,6 @@ class RecordatoryController extends ChangeNotifier {
     }
   }
 
-  // Actualizar el estado de la notificación
   Future<void> toggleNotification(int id) async {
     try {
       _isLoading = true;
@@ -553,6 +733,7 @@ class RecordatoryController extends ChangeNotifier {
       final index = _recordatories.indexWhere(
         (recordatory) => recordatory.id == id,
       );
+
       if (index != -1) {
         final recordatory = _recordatories[index];
         final updatedNotificationStatus = !recordatory.isNotificationEnabled;
@@ -576,6 +757,14 @@ class RecordatoryController extends ChangeNotifier {
           repeatInterval: recordatory.repeatInterval,
           repeatEndDate: recordatory.repeatEndDate,
         );
+
+        // Programar o cancelar notificación local
+        final updatedRecordatory = _recordatories[index];
+        if (updatedNotificationStatus) {
+          await _notificationService.scheduleNotification(updatedRecordatory);
+        } else {
+          await _notificationService.cancelNotification(id);
+        }
       }
 
       _isLoading = false;
@@ -585,6 +774,25 @@ class RecordatoryController extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       throw e; // Relanzar la excepción para que se pueda manejar en la UI
+    }
+  }
+
+  Future<void> rescheduleAllNotifications() async {
+    try {
+      // Primero cancelar todas las notificaciones existentes
+      await _notificationService.cancelAllNotifications();
+
+      // Luego programar las que tienen notificaciones habilitadas
+      final enabledRecordatories =
+          _recordatories.where((r) => r.isNotificationEnabled).toList();
+
+      await _notificationService.scheduleAllNotifications(enabledRecordatories);
+
+      print(
+        'Todas las notificaciones reprogramadas: ${enabledRecordatories.length}',
+      );
+    } catch (e) {
+      print('Error al reprogramar notificaciones: $e');
     }
   }
 
@@ -629,6 +837,12 @@ class RecordatoryController extends ChangeNotifier {
               'repeatEndDate': data['repeatEndDate'] ?? '',
             });
           }).toList();
+
+      try {
+        await rescheduleAllNotifications();
+      } catch (e) {
+        print('Error al programar notificaciones después de cargar: $e');
+      }
 
       _initialLoadComplete = true;
       _isLoading = false;
