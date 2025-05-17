@@ -26,8 +26,6 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
             children: [
               _buildNavBarItem(Icons.home, 0),
               _buildNavBarItem(Icons.add, 1),
-              _buildNavBarItem(Icons.settings, 2),
-              _buildNavBarItem(Icons.logout, 3),
             ],
           ),
         ),
@@ -371,12 +369,6 @@ class _ActivitiesPageState extends State<ActivitiesPage> {
               break;
             case 1:
               Navigator.pushReplacementNamed(context, '/addUser');
-              break;
-            case 2:
-              Navigator.pushReplacementNamed(context, '/settings');
-              break;
-            case 3:
-              Navigator.pushReplacementNamed(context, '/loginPage');
               break;
           }
         }

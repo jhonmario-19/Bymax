@@ -1,8 +1,11 @@
 import 'package:bymax/controllers/loginController.dart';
+import 'package:bymax/services/authService.dart';
 import 'package:flutter/material.dart';
 import 'package:bymax/pages/registerPage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:bymax/controllers/recordatoryController.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,11 +20,15 @@ class _LoginPageState extends State<LoginPage> {
   bool _rememberMe = true;
   bool _isLoading = false;
   bool _isResetLoading = false;
+  bool _isCheckingAuth =
+      true; // Para controlar la verificación inicial de autenticación
   bool _passwordvisible = false;
 
   @override
   void initState() {
     super.initState();
+    // Verificar si hay un usuario ya autenticado
+    _checkExistingAuth();
     // Cargar credenciales guardadas cuando se inicia la pantalla
     _loadSavedCredentials();
   }
@@ -31,6 +38,27 @@ class _LoginPageState extends State<LoginPage> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  // Verificar si hay un usuario ya autenticado
+  Future<void> _checkExistingAuth() async {
+    setState(() {
+      _isCheckingAuth = true;
+    });
+
+    // Verificar estado de autenticación
+    final String? routeName = await AuthService.checkAuthState(context);
+
+    if (!mounted) return;
+
+    if (routeName != null) {
+      // Usuario ya autenticado, redirigir a la pantalla correspondiente
+      Navigator.pushReplacementNamed(context, routeName);
+    } else {
+      setState(() {
+        _isCheckingAuth = false; // Ya no está verificando autenticación
+      });
+    }
   }
 
   // Función para cargar credenciales guardadas
@@ -48,9 +76,6 @@ class _LoginPageState extends State<LoginPage> {
         _passwordController.text = savedPassword;
         _rememberMe = true;
       });
-
-      // Opcionalmente, puedes intentar iniciar sesión automáticamente
-      // await _handleLogin();
     }
   }
 
@@ -183,35 +208,48 @@ class _LoginPageState extends State<LoginPage> {
       );
       return;
     }
+
     setState(() {
       _isLoading = true;
     });
+
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
       final result = await LoginController.signIn(email, password);
+
       if (!mounted) return;
+
       if (result['success'] == true) {
-        // Guardar las credenciales si se seleccionó "Recordarme"
+        // Guardar credenciales si se activa "recordarme"
         await _saveCredentials(email, password);
-        // Guardar información del rol en SharedPreferences
+
+        // Guardar información del usuario
         final prefs = await SharedPreferences.getInstance();
         final String role = result['role'] ?? LoginController.ROLE_ADULTO;
         await prefs.setString('user_role', role);
+        await prefs.setBool('is_admin', LoginController.isAdmin(role));
 
-        // Guardar información de admin usando el método isAdmin del LoginController
-        final bool isAdmin = LoginController.isAdmin(role);
-        await prefs.setBool('is_admin', isAdmin);
-
-        // Guardar el nombre del usuario
         if (result['userData'] != null) {
-          final String userName = result['userData']['nombre'] ?? 'Usuario';
-          await prefs.setString('user_name', userName);
+          await prefs.setString(
+            'user_name',
+            result['userData']['nombre'] ?? 'Usuario',
+          );
         }
+
+        // VERIFICAR NOTIFICACIONES PENDIENTES
+        try {
+          final recordatorioController = Get.find<RecordatoryController>();
+          await recordatorioController.checkForMissedNotifications();
+        } catch (e) {
+          print('Error al verificar notificaciones: $e');
+        }
+
         setState(() {
           _isLoading = false;
         });
-        // Redirigir según el rol usando el método getRouteByRole
+
+        // Redirigir según el rol
         final String routeName = LoginController.getRouteByRole(role);
         Navigator.pushReplacementNamed(context, routeName);
       } else {
@@ -239,16 +277,28 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // Función para limpiar las credenciales guardadas
-  Future<void> _clearSavedCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('saved_email');
-    await prefs.remove('saved_password');
-    await prefs.setBool('remember_me', false);
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Si está verificando la autenticación, mostrar un indicador de carga
+    if (_isCheckingAuth) {
+      return Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('lib/pages/images/backGround.jpg'),
+              fit: BoxFit.cover,
+            ),
+          ),
+          child: const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF03d069)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // UI normal de login
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(

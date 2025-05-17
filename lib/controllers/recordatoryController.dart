@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:get/get.dart';
+import 'package:get/get_core/src/get_main.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/recordatoryModel.dart';
@@ -48,22 +52,46 @@ class RecordatoryController extends ChangeNotifier {
     }
   }
 
-  // Configurar FCM
+  // Reemplaza este método completo
   Future<void> _initializeFCM() async {
-    // Obtener el token FCM
-    _fcmToken = await FirebaseMessaging.instance.getToken();
+    try {
+      // Solicitar permisos explícitamente
+      final settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
 
-    // Actualizar el token en Firestore
-    _updateFCMToken();
+      print('Estado de permisos FCM: ${settings.authorizationStatus}');
 
-    // Escuchar cambios del token
-    FirebaseMessaging.instance.onTokenRefresh.listen((token) {
-      _fcmToken = token;
-      _updateFCMToken();
-    });
+      // Obtener el token FCM
+      _fcmToken = await FirebaseMessaging.instance.getToken();
 
-    // Configurar manejo de mensajes
-    FirebaseMessaging.onMessage.listen(_handleMessage);
+      if (_fcmToken != null) {
+        print('Token FCM obtenido: ${_fcmToken!.substring(0, 20)}...');
+        await _updateFCMToken();
+      } else {
+        print('No se pudo obtener el token FCM');
+      }
+
+      // Verificar notificaciones pendientes al iniciar sesión
+      await checkPendingNotifications();
+
+      // Configurar verificación periódica de notificaciones (cada 60 segundos)
+      Timer.periodic(const Duration(seconds: 60), (_) {
+        checkPendingNotifications();
+      });
+
+      // Escuchar cambios del token
+      FirebaseMessaging.instance.onTokenRefresh.listen((token) {
+        print('Token FCM actualizado');
+        _fcmToken = token;
+        _updateFCMToken();
+      });
+    } catch (e) {
+      print('Error al inicializar FCM: $e');
+    }
   }
 
   Future<void> _initCurrentUserInfo() async {
@@ -87,13 +115,25 @@ class RecordatoryController extends ChangeNotifier {
     }
   }
 
-  // Actualizar el token FCM en Firestore
   Future<void> _updateFCMToken() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null && _fcmToken != null) {
-      await _firestore.collection('usuarios').doc(user.uid).update({
-        'fcmToken': _fcmToken,
-      });
+    if (user == null || _fcmToken == null) return;
+
+    try {
+      // Verificar si el token ha cambiado
+      final userRef = _firestore.collection('usuarios').doc(user.uid);
+      final userDoc = await userRef.get();
+
+      if (!userDoc.exists || userDoc.data()?['fcmToken'] != _fcmToken) {
+        await userRef.update({
+          'fcmToken': _fcmToken,
+          'lastTokenUpdate': FieldValue.serverTimestamp(),
+          'plataforma': Theme.of(Get.context!).platform.toString(),
+        });
+        print('Token FCM actualizado en Firestore');
+      }
+    } catch (e) {
+      print('Error al actualizar token FCM: $e');
     }
   }
 
@@ -610,23 +650,52 @@ class RecordatoryController extends ChangeNotifier {
 
       // Verificar si el usuario destinatario es diferente del creador
       if (recordatory.userId != currentUser.uid) {
-        // Obtener token FCM del usuario destinatario
-        final userDoc =
-            await _firestore
-                .collection('usuarios')
-                .doc(recordatory.userId)
-                .get();
-        final userData = userDoc.data();
-        final userToken = userData?['fcmToken'];
+        try {
+          // Obtener información del usuario destino
+          final userDoc =
+              await _firestore
+                  .collection('usuarios')
+                  .doc(recordatory.userId)
+                  .get();
+          if (!userDoc.exists) return;
 
-        if (userToken != null) {
-          // Enviar notificación a través de tu backend o servicio de terceros
-          await _sendNotificationToUser(
-            token: userToken,
-            title: 'Nuevo recordatorio',
-            body: recordatory.title,
-            data: {'recordatoryId': recordatory.id.toString()},
-          );
+          final userData = userDoc.data()!;
+          final userToken = userData['fcmToken'];
+          final userName = userData['nombre'] ?? 'Usuario';
+
+          // Obtener información del creador para personalizar el mensaje
+          final creatorDoc =
+              await _firestore
+                  .collection('usuarios')
+                  .doc(currentUser.uid)
+                  .get();
+          final creatorName =
+              creatorDoc.exists
+                  ? (creatorDoc.data()?['nombre'] ?? 'Alguien')
+                  : 'Alguien';
+
+          if (userToken != null) {
+            // Crear datos adicionales útiles
+            final notificationData = {
+              'recordatoryId': recordatory.id.toString(),
+              'creatorId': currentUser.uid,
+              'userId': recordatory.userId,
+              'route': '/recordatorio/detalle',
+              'timestamp': DateTime.now().millisecondsSinceEpoch,
+            };
+
+            // Enviar notificación
+            await _sendNotificationToUser(
+              token: userToken,
+              title: '$creatorName te ha enviado un recordatorio',
+              body: 'Nuevo recordatorio: ${recordatory.title}',
+              data: notificationData,
+            );
+
+            print('Notificación enviada a $userName');
+          }
+        } catch (e) {
+          print('Error al notificar al usuario destino: $e');
         }
       }
 
@@ -673,33 +742,59 @@ class RecordatoryController extends ChangeNotifier {
     }
   }
 
-  // Método para enviar notificación (usando REST API de FCM)
   Future<void> _sendNotificationToUser({
     required String token,
     required String title,
     required String body,
     Map<String, dynamic>? data,
   }) async {
-    // Aquí utilizaremos una solución alternativa a Cloud Functions
-    // Puedes implementar un servicio de terceros como OneSignal o un backend simple
-
-    // Nota: Esta clave no es segura en producción, usa un backend intermedio
-    final response = await http.post(
-      Uri.parse('https://fcm.googleapis.com/fcm/send'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization':
-            'key=TU_CLAVE_DE_SERVIDOR', // Reemplazar con tu clave real de Firebase
-      },
-      body: jsonEncode({
-        'to': token,
-        'notification': {'title': title, 'body': body},
+    try {
+      // En lugar de llamar directamente a FCM, almacena la notificación en una colección de Firestore
+      final notificationData = {
+        'token': token,
+        'title': title,
+        'body': body,
         'data': data ?? {},
-      }),
-    );
+        'timestamp': FieldValue.serverTimestamp(),
+        'status': 'pending',
+        'recipientId': data?['userId'] ?? '',
+      };
 
-    if (response.statusCode != 200) {
-      print('Error enviando notificación: ${response.body}');
+      await _firestore.collection('pendingNotifications').add(notificationData);
+
+      print('Notificación añadida a la cola: $title');
+    } catch (e) {
+      print('Error al agregar notificación a la cola: $e');
+    }
+  }
+
+  Future<void> checkPendingNotifications() async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) return;
+
+      final pendingNotifications =
+          await _firestore
+              .collection('pendingNotifications')
+              .where('recipientId', isEqualTo: currentUser.uid)
+              .where('status', isEqualTo: 'pending')
+              .get();
+
+      for (var doc in pendingNotifications.docs) {
+        final notification = doc.data();
+        // Mostrar como notificación local
+        await _notificationService.showLocalNotification(
+          doc.hashCode,
+          notification['title'] ?? 'Nuevo recordatorio',
+          notification['body'] ?? '',
+          notification['data']?['recordatoryId']?.toString(),
+        );
+
+        // Actualizar estado
+        await doc.reference.update({'status': 'delivered'});
+      }
+    } catch (e) {
+      print('Error al verificar notificaciones pendientes: $e');
     }
   }
 
@@ -804,16 +899,6 @@ class RecordatoryController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Si la carga inicial ya terminó y estamos buscando para el mismo usuario,
-      // no es necesario volver a cargar todo
-      if (_initialLoadComplete &&
-          _recordatories.isNotEmpty &&
-          _recordatories.first.userId == userId) {
-        _isLoading = false;
-        notifyListeners();
-        return;
-      }
-
       final querySnapshot =
           await _firestore
               .collection(_collectionName)
@@ -851,6 +936,57 @@ class RecordatoryController extends ChangeNotifier {
       print('Error al cargar recordatorios para el usuario: $e');
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  // Método nuevo para llamar desde la pantalla de inicio
+  Future<void> checkForMissedNotifications() async {
+    try {
+      await checkPendingNotifications();
+
+      // También reprogramar notificaciones locales
+      if (_recordatories.isNotEmpty) {
+        final now = DateTime.now();
+
+        // Filtrar recordatorios futuros
+        final futureRecordatories =
+            _recordatories.where((r) {
+              if (!r.isNotificationEnabled) return false;
+
+              final dateParts = r.date.split('/');
+              final timeParts = r.time.split(':');
+
+              if (dateParts.length != 3 || timeParts.length != 2) return false;
+
+              try {
+                final day = int.parse(dateParts[0]);
+                final month = int.parse(dateParts[1]);
+                final year = int.parse(dateParts[2]);
+                final hour = int.parse(timeParts[0]);
+                final minute = int.parse(timeParts[1]);
+
+                final recordatoryDate = DateTime(
+                  year,
+                  month,
+                  day,
+                  hour,
+                  minute,
+                );
+                return recordatoryDate.isAfter(now);
+              } catch (e) {
+                return false;
+              }
+            }).toList();
+
+        await _notificationService.scheduleAllNotifications(
+          futureRecordatories,
+        );
+        print(
+          '${futureRecordatories.length} notificaciones reprogramadas al iniciar sesión',
+        );
+      }
+    } catch (e) {
+      print('Error al verificar notificaciones perdidas: $e');
     }
   }
 

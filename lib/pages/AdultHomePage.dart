@@ -30,14 +30,14 @@ class _AdultHomePageState extends State<AdultHomePages> {
   void initState() {
     super.initState();
     _initializeTTS();
-    _configureNotifications();
     _initLocalNotifications();
+    _configureNotifications();
+    _checkForMissedNotifications();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Cargar datos solo una vez después de que el contexto esté disponible
     if (!_isInitialized) {
       _loadUserInfo();
       _isInitialized = true;
@@ -46,6 +46,11 @@ class _AdultHomePageState extends State<AdultHomePages> {
 
   Future<void> _initLocalNotifications() async {
     await _notificationService.init();
+  }
+
+  Future<void> _initializeApp() async {
+    await _loadUserInfo();
+    _setupForegroundNotificationHandling();
   }
 
   // Configurar permisos de notificaciones
@@ -59,6 +64,33 @@ class _AdultHomePageState extends State<AdultHomePages> {
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       setState(() {});
     });
+  }
+
+  Future<void> _checkForMissedNotifications() async {
+    try {
+      final recordatoryController = Provider.of<RecordatoryController>(
+        context,
+        listen: false,
+      );
+
+      // Verificar notificaciones pendientes de Firebase
+      await recordatoryController.checkPendingNotifications();
+
+      // Reprogramar notificaciones locales si es necesario
+      if (recordatoryController.recordatories.isNotEmpty) {
+        await recordatoryController.rescheduleAllNotifications();
+      }
+    } catch (e) {
+      print('Error al verificar notificaciones perdidas: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar notificaciones: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   // Inicializar el servicio TTS
@@ -75,12 +107,15 @@ class _AdultHomePageState extends State<AdultHomePages> {
 
   Future<void> _loadUserInfo() async {
     try {
+      setState(() {
+        _loadingUser = true;
+      });
+
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        _debugUserId = user.uid; // Guardar para depuración
-        print('ID del usuario actual: ${user.uid}'); // Depuración
+        _debugUserId = user.uid;
+        print('ID del usuario actual: ${user.uid}');
 
-        // Trae el nombre desde Firestore
         final userDoc =
             await FirebaseFirestore.instance
                 .collection('usuarios')
@@ -88,28 +123,33 @@ class _AdultHomePageState extends State<AdultHomePages> {
                 .get();
 
         if (mounted) {
-          // Comprobar si el widget sigue montado
           setState(() {
             userName = userDoc.data()?['nombre'] ?? 'Usuario';
-            _loadingUser = false;
           });
 
-          // Carga los recordatorios asignados a este usuario SOLO UNA VEZ
           final recordatoryController = Provider.of<RecordatoryController>(
             context,
             listen: false,
           );
 
-          // Depuración - verifica si hay recordatorios para este usuario
-          print('Cargando recordatorios para usuario: ${user.uid}');
-
-          // Primero intentar obtener recordatorios donde el usuario es el destinatario
-          await recordatoryController.fetchRecordatoriesForUser(user.uid);
+          // Cargar recordatorios y verificar notificaciones
+          await Future.wait([
+            recordatoryController.fetchRecordatoriesForUser(user.uid),
+            _checkForMissedNotifications(), // Verificación añadida aquí
+          ]);
 
           print(
-            'Número de recordatorios cargados: ${recordatoryController.recordatories.length}',
+            'Recordatorios cargados: ${recordatoryController.recordatories.length}',
           );
+
+          setState(() {
+            _loadingUser = false;
+          });
         }
+      } else {
+        setState(() {
+          _loadingUser = false;
+        });
       }
     } catch (e) {
       print('Error al cargar datos: $e');
@@ -155,6 +195,34 @@ class _AdultHomePageState extends State<AdultHomePages> {
         _loadingUser = false;
       });
     }
+  }
+
+  void _setupForegroundNotificationHandling() {
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+      // Verificar notificaciones pendientes cuando llega una nueva
+      await _checkForMissedNotifications();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Nuevo recordatorio: ${message.notification?.title ?? ""}',
+            ),
+            action: SnackBarAction(
+              label: 'Ver',
+              onPressed: () {
+                final recordatoryId = int.tryParse(
+                  message.data['recordatoryId'] ?? '',
+                );
+                if (recordatoryId != null) {
+                  _handleNotificationTap(recordatoryId);
+                }
+              },
+            ),
+          ),
+        );
+      }
+    });
   }
 
   // Método para leer un recordatorio en voz alta
@@ -235,35 +303,6 @@ class _AdultHomePageState extends State<AdultHomePages> {
         );
       }
     }
-  }
-
-  void _setupForegroundNotificationHandling() {
-    // Escuchar notificaciones cuando la app está en primer plano
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      // Refrescar la lista de recordatorios
-      _refreshRecordatorios();
-
-      // Opcional: mostrar un mensaje en la UI
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Nuevo recordatorio recibido: ${message.notification?.title ?? ""}',
-          ),
-          action: SnackBarAction(
-            label: 'Ver',
-            onPressed: () {
-              // Intentar extraer el ID del recordatorio
-              final recordatoryId = int.tryParse(
-                message.data['recordatoryId'] ?? '',
-              );
-              if (recordatoryId != null) {
-                _handleNotificationTap(recordatoryId);
-              }
-            },
-          ),
-        ),
-      );
-    });
   }
 
   @override

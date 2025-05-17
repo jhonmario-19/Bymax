@@ -1,10 +1,77 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_init;
-import 'package:flutter/material.dart';
-import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get/get.dart';
 import '../models/recordatoryModel.dart';
+
+// Manejador global para mensajes en segundo plano
+// IMPORTANTE: Debe estar fuera de cualquier clase para ser accesible globalmente
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Asegúrate de inicializar Firebase antes de cualquier operación
+  await Firebase.initializeApp();
+  print("Mensaje FCM recibido en segundo plano: ${message.messageId}");
+  print("Datos del mensaje en segundo plano: ${message.data}");
+
+  // Inicializar el plugin de notificaciones locales
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  // Configurar para Android
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  // Configurar para iOS
+  const DarwinInitializationSettings initializationSettingsIOS =
+      DarwinInitializationSettings();
+
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+    iOS: initializationSettingsIOS,
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+  // Mostrar la notificación recibida en segundo plano
+  if (message.notification != null) {
+    await flutterLocalNotificationsPlugin.show(
+      message.hashCode,
+      message.notification!.title ?? 'Nueva notificación',
+      message.notification!.body ?? '',
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          'high_importance_channel',
+          'Recordatorios',
+          channelDescription: 'Notificaciones de recordatorios importantes',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: const DarwinNotificationDetails(),
+      ),
+      payload: message.data['route'],
+    );
+  } else if (message.data.isNotEmpty) {
+    await flutterLocalNotificationsPlugin.show(
+      message.hashCode,
+      message.data['title'] ?? 'Nuevo recordatorio',
+      message.data['body'] ?? 'Tienes un nuevo recordatorio pendiente',
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          'high_importance_channel',
+          'Recordatorios',
+          channelDescription: 'Notificaciones de recordatorios importantes',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: const DarwinNotificationDetails(),
+      ),
+      payload: message.data['route'],
+    );
+  }
+}
 
 class NotificationService {
   // Singleton pattern
@@ -19,9 +86,25 @@ class NotificationService {
   final Map<int, int> _scheduledNotifications =
       {}; // <notificationId, recordatorioId>
 
+  // Constantes para canales de notificación
+  static const AndroidNotificationChannel _highImportanceChannel =
+      AndroidNotificationChannel(
+        'high_importance_channel',
+        'Recordatorios',
+        description: 'Notificaciones de recordatorios importantes',
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+      );
+
   // Inicializar el servicio de notificaciones
   Future<void> init() async {
+    // Inicializar zonas horarias
     tz_init.initializeTimeZones();
+
+    // Registrar el handler global para mensajes en segundo plano
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     // Configuración para Android
     const AndroidInitializationSettings initializationSettingsAndroid =
@@ -46,51 +129,179 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
 
-    // Solicitar permisos en iOS
+    // Crear canales de notificación para Android
+    await _setupNotificationChannels();
+
+    // Solicitar permisos para FCM y notificaciones locales
+    await _requestNotificationPermissions();
+
+    // Configurar manejadores de mensajes para FCM
+    await _setupMessageHandlers();
+
+    // Recuperar notificaciones programadas guardadas
+    await _loadScheduledNotificationsFromPrefs();
+
+    // Configurar FCM para recibir notificaciones en segundo plano
+    await _setupFCMForBackgroundMessages();
+
+    print('Servicio de notificaciones inicializado');
+  }
+
+  // NUEVO: Configurar FCM para mensajes en segundo plano
+  Future<void> _setupFCMForBackgroundMessages() async {
+    // Obtener el token de FCM y guardarlo si es necesario
+    String? token = await FirebaseMessaging.instance.getToken();
+    print('FCM Token: $token');
+
+    // Puedes guardar este token en tu backend o Firestore para enviar
+    // notificaciones específicas a este dispositivo
+
+    // Configurar los tipos de notificaciones que queremos recibir
+    await FirebaseMessaging.instance
+        .setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+
+    // IMPORTANTE: Para iOS, configurar la capacidad de recibir notificaciones en segundo plano
+    await FirebaseMessaging.instance.setAutoInitEnabled(true);
+  }
+
+  Future<void> _setupNotificationChannels() async {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(_highImportanceChannel);
+  }
+
+  Future<void> _requestNotificationPermissions() async {
+    // Permisos para notificaciones locales en iOS
     await flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin
         >()
         ?.requestPermissions(alert: true, badge: true, sound: true);
 
-    // Configurar canales para Android
-    await _setupNotificationChannels();
+    // Permisos para Firebase Cloud Messaging
+    NotificationSettings settings = await FirebaseMessaging.instance
+        .requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+          provisional: false,
+          announcement: true,
+          carPlay: false,
+          criticalAlert: true,
+        );
 
-    // Recuperar notificaciones guardadas
-    await _loadScheduledNotificationsFromPrefs();
-  }
-
-  Future<void> _setupNotificationChannels() async {
-    // Canal para notificaciones de recordatorios
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      'high_importance_channel',
-      'Recordatorios',
-      description: 'Notificaciones de recordatorios importantes',
-      importance: Importance.high,
-      playSound: true,
-      enableVibration: true,
+    print(
+      'Estado de autorización para notificaciones FCM: ${settings.authorizationStatus}',
     );
-
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(channel);
   }
 
-  // Manejar cuando el usuario toca una notificación
+  Future<void> _setupMessageHandlers() async {
+    // Comprobar notificaciones pendientes que pueden haber abierto la app
+    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      print(
+        'La app se inició con una notificación: ${initialMessage.messageId}',
+      );
+      Future.delayed(const Duration(seconds: 1), () {
+        _handleMessage(initialMessage);
+      });
+    }
+
+    // Configurar manejador de mensajes en primer plano
+    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+
+    // Configurar manejador cuando se abre la app desde una notificación
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessage);
+  }
+
+  // Manejador de notificaciones tocadas (locales)
   void _onNotificationTapped(NotificationResponse response) {
-    // Extraer el ID del recordatorio de la carga útil
     final payload = response.payload;
     if (payload != null && payload.isNotEmpty) {
       try {
-        // Aquí podrías navegar a una pantalla específica o realizar una acción
-        print('Notificación tocada: recordatorio ID $payload');
-        // Implementa la navegación según tus necesidades
+        print('Notificación local tocada: ID $payload');
+        // Navegar a la pantalla de detalles del recordatorio
+        Get.toNamed('/recordatorio/detalle', arguments: {'id': payload});
       } catch (e) {
-        print('Error al procesar la notificación: $e');
+        print('Error al procesar la notificación local: $e');
       }
     }
+  }
+
+  // Manejador para mensajes en primer plano (FCM)
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    print('Mensaje FCM recibido en primer plano!');
+    print('Datos del mensaje: ${message.data}');
+
+    if (message.notification != null) {
+      await showLocalNotification(
+        message.hashCode,
+        message.notification!.title ?? 'Nueva notificación',
+        message.notification!.body ?? '',
+        message.data['route'],
+      );
+    } else if (message.data.isNotEmpty) {
+      await showLocalNotification(
+        message.hashCode,
+        message.data['title'] ?? 'Nuevo recordatorio',
+        message.data['body'] ?? 'Tienes un nuevo recordatorio pendiente',
+        message.data['route'],
+      );
+    }
+  }
+
+  // Manejador para cuando la app se abre desde una notificación FCM
+  void _handleMessage(RemoteMessage message) {
+    print(
+      'La aplicación se abrió desde una notificación FCM: ${message.messageId}',
+    );
+    print('Datos: ${message.data}');
+    print('Notificación: ${message.notification?.title}');
+
+    // Navegación usando GetX
+    final route = message.data['route'];
+    if (route != null && route.isNotEmpty) {
+      Get.toNamed(route);
+    }
+  }
+
+  // Mostrar notificación local
+  Future<void> showLocalNotification(
+    int id,
+    String title,
+    String body,
+    String? payload,
+  ) async {
+    await flutterLocalNotificationsPlugin.show(
+      id,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _highImportanceChannel.id,
+          _highImportanceChannel.name,
+          channelDescription: _highImportanceChannel.description,
+          icon: '@mipmap/ic_launcher',
+          importance: Importance.max,
+          priority: Priority.high,
+          showWhen: true,
+          enableLights: true,
+          playSound: true,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: payload,
+    );
   }
 
   // Programar una notificación para un recordatorio
@@ -135,9 +346,9 @@ class NotificationService {
       // Configurar detalles de la notificación
       final AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
-            'high_importance_channel',
-            'Recordatorios',
-            channelDescription: 'Notificaciones de recordatorios importantes',
+            _highImportanceChannel.id,
+            _highImportanceChannel.name,
+            channelDescription: _highImportanceChannel.description,
             importance: Importance.high,
             priority: Priority.high,
             ticker: 'Nuevo recordatorio',
@@ -256,5 +467,29 @@ class NotificationService {
     } catch (e) {
       print('Error al cargar notificaciones programadas: $e');
     }
+  }
+
+  // Enviar notificación de prueba (útil para depuración)
+  Future<void> sendTestNotification() async {
+    await showLocalNotification(
+      0,
+      'Prueba de notificación',
+      'Esta es una notificación de prueba',
+      null,
+    );
+    print('Notificación de prueba enviada');
+  }
+
+  // Suscribirse a un tema para recibir notificaciones grupales
+  Future<void> subscribeToTopic(String topic) async {
+    await FirebaseMessaging.instance.subscribeToTopic(topic);
+    print('Suscrito al tema: $topic');
+  }
+
+  // Obtener y mostrar el token de FCM (útil para pruebas)
+  Future<String?> getFirebaseToken() async {
+    final token = await FirebaseMessaging.instance.getToken();
+    print('Token FCM: $token');
+    return token;
   }
 }

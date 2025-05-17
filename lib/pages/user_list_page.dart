@@ -340,8 +340,6 @@ class _UserListPageState extends State<UserListPage> {
                   children: [
                     _buildNavBarItem(Icons.home, 0),
                     _buildNavBarItem(Icons.add, 1),
-                    _buildNavBarItem(Icons.settings, 2),
-                    _buildNavBarItem(Icons.logout, 3),
                   ],
                 ),
               )
@@ -806,35 +804,6 @@ class _UserListPageState extends State<UserListPage> {
             case 1:
               if (!_isFamiliar) {
                 Navigator.pushReplacementNamed(context, '/addUser');
-              }
-              break;
-            case 2:
-              Navigator.pushReplacementNamed(context, '/settings');
-              break;
-            case 3:
-              try {
-                final result = await _controller.signOut();
-                if (!mounted) return;
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(result['message']),
-                    backgroundColor:
-                        result['success'] ? Colors.green : Colors.red,
-                  ),
-                );
-
-                if (result['success']) {
-                  Navigator.pushReplacementNamed(context, '/loginPage');
-                }
-              } catch (e) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error al cerrar sesión: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
               }
               break;
           }

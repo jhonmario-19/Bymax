@@ -396,12 +396,7 @@ class _AddUserPageState extends State<AddUserPage> {
         decoration: BoxDecoration(color: const Color(0xFF03d069)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildNavBarItem(Icons.home, 0),
-            _buildNavBarItem(Icons.add, 1),
-            _buildNavBarItem(Icons.settings, 2),
-            _buildNavBarItem(Icons.logout, 3),
-          ],
+          children: [_buildNavBarItem(Icons.home, 0)],
         ),
       ),
       body: Container(
@@ -952,15 +947,6 @@ class _AddUserPageState extends State<AddUserPage> {
           switch (index) {
             case 0:
               Navigator.pushReplacementNamed(context, '/homePage');
-              break;
-            case 1:
-              // Ya estamos en la página de agregar usuario
-              break;
-            case 2:
-              Navigator.pushReplacementNamed(context, '/settings');
-              break;
-            case 3:
-              Navigator.pushReplacementNamed(context, '/loginPage');
               break;
           }
         }
