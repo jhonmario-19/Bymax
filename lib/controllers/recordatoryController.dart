@@ -990,6 +990,26 @@ class RecordatoryController extends ChangeNotifier {
     }
   }
 
+  Recordatory? findRecordatoryById(int recordatoryId) {
+    try {
+      final recordatory = _recordatories.firstWhere(
+        (recordatory) => recordatory.id == recordatoryId,
+      );
+
+      return recordatory;
+    } on StateError catch (_) {
+      print(
+        'Recordatorio con ID $recordatoryId no encontrado en la lista local',
+      );
+      return null;
+    } catch (e) {
+      print(
+        'Error inesperado al buscar recordatorio con ID $recordatoryId: $e',
+      );
+      return null;
+    }
+  }
+
   // Método para refrescar la lista de usuarios explícitamente
   Future<void> refreshUsers() async {
     await _fetchUsers();

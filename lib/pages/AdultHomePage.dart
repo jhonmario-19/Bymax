@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -24,6 +25,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
   int? _speakingRecordatoryId;
   bool _isInitialized = false; // Bandera para controlar la inicialización
   String? _debugUserId; // Para depuración
+  Timer? _periodicCheckTimer;
   final NotificationService _notificationService = NotificationService();
 
   @override
@@ -32,6 +34,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
     _initializeTTS();
     _initLocalNotifications();
     _configureNotifications();
+    _startPeriodicCheck();
     _checkForMissedNotifications();
   }
 
@@ -48,9 +51,98 @@ class _AdultHomePageState extends State<AdultHomePages> {
     await _notificationService.init();
   }
 
+  void _startPeriodicCheck() {
+    // Verificar cada minuto si hay recordatorios que deban activarse
+    _periodicCheckTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      _checkCurrentTimeRecordatories();
+    });
+  }
+
   Future<void> _initializeApp() async {
     await _loadUserInfo();
     _setupForegroundNotificationHandling();
+  }
+
+  void _checkCurrentTimeRecordatories() async {
+    if (!mounted) return;
+
+    final recordatoryController = Provider.of<RecordatoryController>(
+      context,
+      listen: false,
+    );
+
+    final now = DateTime.now();
+    final currentTimeString =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    final currentDateString =
+        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+
+    // Filtrar recordatorios no leídos que coincidan con la fecha/hora actual
+    final activeRecordatories =
+        recordatoryController.recordatories
+            .where(
+              (r) =>
+                  !r.isRead &&
+                  r.date == currentDateString &&
+                  r.time == currentTimeString,
+            )
+            .toList();
+
+    if (activeRecordatories.isNotEmpty) {
+      // Ordenar por ID (asumimos que IDs mayores son más recientes)
+      activeRecordatories.sort((a, b) => b.id.compareTo(a.id));
+
+      final mostRecent = activeRecordatories.first;
+      _speakRecordatoryAsAlarm(mostRecent);
+
+      // Marcar como leído
+      recordatoryController.markRecordatoryAsRead(mostRecent.id);
+    }
+  }
+
+  void _speakRecordatoryAsAlarm(Recordatory recordatory) async {
+    // Construir el texto para hablar
+    String textToSpeak =
+        "¡Atención! Recordatorio importante: ${recordatory.title}. ";
+    textToSpeak += "Fecha: ${recordatory.date}. ";
+    textToSpeak += "Hora: ${recordatory.time}.";
+
+    // Actualizar el estado y hablar en modo alarma
+    setState(() {
+      _speakingRecordatoryId = recordatory.id;
+    });
+
+    // Usar el nuevo método de TTS para reproducir como alarma
+    await _ttsService.speakAsAlarm(textToSpeak);
+
+    // Cuando termina, actualizar estado
+    if (!_ttsService.isSpeaking && mounted) {
+      setState(() {
+        _speakingRecordatoryId = null;
+      });
+    }
+  }
+
+  void _scrollToRecordatory(Recordatory recordatory) {
+    final recordatoryController = Provider.of<RecordatoryController>(
+      context,
+      listen: false,
+    );
+
+    // Encontrar índice del recordatorio
+    final index = recordatoryController.recordatories.indexOf(recordatory);
+    if (index != -1) {
+      // Calcular posición aproximada
+      final itemHeight = 120.0; // Altura estimada del elemento de recordatorio
+      final offset = index * itemHeight;
+
+      // Desplazar con animación
+      _scrollController.animateTo(
+        offset,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   // Configurar permisos de notificaciones
@@ -100,6 +192,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
 
   @override
   void dispose() {
+    _periodicCheckTimer?.cancel();
     _scrollController.dispose();
     _ttsService.dispose();
     super.dispose();
@@ -225,7 +318,6 @@ class _AdultHomePageState extends State<AdultHomePages> {
     });
   }
 
-  // Método para leer un recordatorio en voz alta
   void _speakRecordatory(Recordatory recordatory) async {
     // Si ya estamos hablando, detener primero
     if (_ttsService.isSpeaking) {
@@ -250,15 +342,22 @@ class _AdultHomePageState extends State<AdultHomePages> {
       _speakingRecordatoryId = recordatory.id;
     });
 
+    // Marcar como leído si no lo está
+    final recordatoryController = Provider.of<RecordatoryController>(
+      context,
+      listen: false,
+    );
+    if (!recordatory.isRead) {
+      recordatoryController.markRecordatoryAsRead(recordatory.id);
+    }
+
     await _ttsService.speak(textToSpeak);
 
     // Cuando termina de hablar, actualizar el estado
-    if (!_ttsService.isSpeaking) {
-      if (mounted) {
-        setState(() {
-          _speakingRecordatoryId = null;
-        });
-      }
+    if (!_ttsService.isSpeaking && mounted) {
+      setState(() {
+        _speakingRecordatoryId = null;
+      });
     }
   }
 

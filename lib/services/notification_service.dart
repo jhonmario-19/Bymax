@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:bymax/controllers/recordatoryController.dart';
+import 'package:bymax/services/tts_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -7,8 +11,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:get/get.dart';
 import '../models/recordatoryModel.dart';
 
-// Manejador global para mensajes en segundo plano
-// IMPORTANTE: Debe estar fuera de cualquier clase para ser accesible globalmente
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Asegúrate de inicializar Firebase antes de cualquier operación
@@ -234,25 +236,110 @@ class NotificationService {
     }
   }
 
-  // Manejador para mensajes en primer plano (FCM)
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     print('Mensaje FCM recibido en primer plano!');
     print('Datos del mensaje: ${message.data}');
+
+    // Extraer el ID del recordatorio
+    final recordatoryId = int.tryParse(message.data['recordatoryId'] ?? '');
 
     if (message.notification != null) {
       await showLocalNotification(
         message.hashCode,
         message.notification!.title ?? 'Nueva notificación',
         message.notification!.body ?? '',
-        message.data['route'],
+        message
+            .data['recordatoryId'], // Usar el ID del recordatorio como payload
       );
+
+      // Activar TTS automáticamente si está configurado
+      if (recordatoryId != null) {
+        _triggerRecordatoryAlarm(recordatoryId);
+      }
     } else if (message.data.isNotEmpty) {
       await showLocalNotification(
         message.hashCode,
         message.data['title'] ?? 'Nuevo recordatorio',
         message.data['body'] ?? 'Tienes un nuevo recordatorio pendiente',
-        message.data['route'],
+        message.data['recordatoryId'],
       );
+
+      // Activar TTS automáticamente si está configurado
+      if (recordatoryId != null) {
+        _triggerRecordatoryAlarm(recordatoryId);
+      }
+    }
+  }
+
+  Future<void> checkUpcomingRecordatories() async {
+    try {
+      // Obtenemos el controlador de recordatorios
+      final recordatoryController = Get.find<RecordatoryController>();
+      final now = DateTime.now();
+
+      // Verificar cada recordatorio
+      for (final recordatory in recordatoryController.recordatories) {
+        // Parsear fecha y hora
+        final dateTimeParts = recordatory.date.split('/');
+        final timeParts = recordatory.time.split(':');
+
+        if (dateTimeParts.length == 3 && timeParts.length == 2) {
+          final day = int.parse(dateTimeParts[0]);
+          final month = int.parse(dateTimeParts[1]);
+          final year = int.parse(dateTimeParts[2]);
+          final hour = int.parse(timeParts[0]);
+          final minute = int.parse(timeParts[1]);
+
+          final scheduledDate = DateTime(year, month, day, hour, minute);
+
+          // Si está próximo (menos de 5 minutos) y no ha sido marcado como leído
+          final difference = scheduledDate.difference(now);
+          if (difference.inMinutes <= 5 &&
+              difference.inMinutes >= 0 &&
+              !recordatory.isRead) {
+            // Programar la notificación inminente
+            showLocalNotification(
+              recordatory.id + 1000, // ID diferente para evitar conflictos
+              '¡Recordatorio inminente!',
+              '${recordatory.title} se activará en ${difference.inMinutes} minutos',
+              recordatory.id.toString(),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Error al verificar recordatorios próximos: $e');
+    }
+  }
+
+  void _triggerRecordatoryAlarm(int recordatoryId) {
+    // Usar GetX para acceder al controlador de recordatorios
+    final recordatoryController = Get.find<RecordatoryController>();
+
+    // Buscar el recordatorio específico
+    final recordatory = recordatoryController.findRecordatoryById(
+      recordatoryId,
+    );
+
+    if (recordatory != null) {
+      // Marcar como leído
+      recordatoryController.markRecordatoryAsRead(recordatoryId);
+
+      // Reproducir audio automáticamente
+      final ttsService = TTSService();
+
+      // Texto para reproducir
+      String textToSpeak = "Recordatorio: ${recordatory.title}. ";
+      textToSpeak += "Fecha: ${recordatory.date}. ";
+      textToSpeak += "Hora: ${recordatory.time}.";
+
+      // Reproducir el texto
+      ttsService.speak(textToSpeak);
+
+      // Si la app está en primer plano, navegar a la vista de recordatorios
+      if (Get.context != null) {
+        Get.toNamed('/adultHomePage');
+      }
     }
   }
 
@@ -304,7 +391,6 @@ class NotificationService {
     );
   }
 
-  // Programar una notificación para un recordatorio
   Future<void> scheduleNotification(Recordatory recordatorio) async {
     if (!recordatorio.isNotificationEnabled) {
       print('Notificaciones desactivadas para este recordatorio');
@@ -334,6 +420,26 @@ class NotificationService {
         print(
           'La fecha del recordatorio ya pasó: ${recordatorio.date} ${recordatorio.time}',
         );
+
+        // NUEVO: Si el recordatorio es de hoy pero ya pasó por poco tiempo (menos de 15 minutos),
+        // mostrar inmediatamente como alarma
+        final DateTime now = DateTime.now();
+        final Duration difference = now.difference(scheduledDate).abs();
+        if (scheduledDate.day == now.day &&
+            scheduledDate.month == now.month &&
+            scheduledDate.year == now.year &&
+            difference.inMinutes < 15) {
+          // Mostrar inmediatamente como una alarma con el TTS
+          showLocalNotification(
+            recordatorio.id,
+            'Recordatorio: ${recordatorio.title}',
+            'Este recordatorio estaba programado para hace poco tiempo: ${recordatorio.time}',
+            recordatorio.id.toString(),
+          );
+
+          // Llamar al método para reproducir alarma
+          _triggerRecordatoryAlarm(recordatorio.id);
+        }
         return;
       }
 
@@ -343,7 +449,7 @@ class NotificationService {
       // ID único para la notificación
       final notificationId = recordatorio.id;
 
-      // Configurar detalles de la notificación
+      // Configurar detalles de la notificación con datos mejorados
       final AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
             _highImportanceChannel.id,
@@ -351,12 +457,23 @@ class NotificationService {
             channelDescription: _highImportanceChannel.description,
             importance: Importance.high,
             priority: Priority.high,
-            ticker: 'Nuevo recordatorio',
+            ticker: 'Recordatorio importante',
             styleInformation: BigTextStyleInformation(
               recordatorio.title,
               contentTitle: 'Recordatorio: ${recordatorio.title}',
               summaryText: 'Hora: ${recordatorio.time}',
             ),
+            fullScreenIntent:
+                true, // NUEVO: Muestra como alerta de pantalla completa
+            sound: const RawResourceAndroidNotificationSound(
+              'notification_sound',
+            ), // NUEVO: Sonido personalizado
+            vibrationPattern: Int64List.fromList([
+              0,
+              500,
+              200,
+              500,
+            ]), // NUEVO: Patrón de vibración
           );
 
       final NotificationDetails notificationDetails = NotificationDetails(
@@ -365,6 +482,8 @@ class NotificationService {
           presentAlert: true,
           presentBadge: true,
           presentSound: true,
+          sound:
+              'notification_sound.aiff', // NUEVO: Sonido personalizado para iOS
         ),
       );
 

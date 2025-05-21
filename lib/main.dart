@@ -5,6 +5,9 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:timezone/data/latest.dart' as tz_init;
+import 'package:timezone/timezone.dart' as tz;
 import 'firebase_options.dart';
 import 'package:bymax/pages/loginPage.dart';
 import 'package:bymax/pages/homePage.dart';
@@ -17,11 +20,24 @@ import 'package:bymax/controllers/authStateController.dart';
 import 'package:bymax/services/notification_service.dart';
 import 'package:bymax/pages/familiarHomePage.dart';
 
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  print("Mensaje en segundo plano recibido: ${message.messageId}");
+  // Aquí puedes agregar más lógica para manejar la notificación en segundo plano
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Inicializar Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Inicializar zonas horarias para notificaciones programadas
+  tz_init.initializeTimeZones();
+
+  // Registrar el handler para mensajes en segundo plano
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   // Configurar notificaciones
   final notificationService = NotificationService();
@@ -34,7 +50,15 @@ Future<void> main() async {
   final recordatoryController = RecordatoryController();
   Get.put(recordatoryController, permanent: true);
 
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        // Proporcionar el RecordatoryController a nivel de aplicación
+        ChangeNotifierProvider.value(value: Get.find<RecordatoryController>()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -42,33 +66,27 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        // Proporcionar el RecordatoryController a nivel de aplicación
-        ChangeNotifierProvider.value(value: Get.find<RecordatoryController>()),
-      ],
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Bymax App',
-        theme: ThemeData(
-          primaryColor: const Color(0xFF03d069),
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF03d069),
-            primary: const Color(0xFF03d069),
-          ),
-          useMaterial3: true,
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Bymax App',
+      theme: ThemeData(
+        primaryColor: const Color(0xFF03d069),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF03d069),
+          primary: const Color(0xFF03d069),
         ),
-        initialRoute: '/loginPage',
-        routes: {
-          '/loginPage': (context) => const LoginPage(),
-          '/homePage': (context) => const homePage(),
-          '/addUser': (context) => const AddUserPage(),
-          '/activities': (context) => const ActivitiesPage(),
-          '/userList': (context) => const UserListPage(),
-          '/familiarHome': (context) => const FamiliarHomePage(),
-          '/adultHome': (context) => const AdultHomePages(),
-        },
+        useMaterial3: true,
       ),
+      initialRoute: '/loginPage',
+      routes: {
+        '/loginPage': (context) => const LoginPage(),
+        '/homePage': (context) => const homePage(),
+        '/addUser': (context) => const AddUserPage(),
+        '/activities': (context) => const ActivitiesPage(),
+        '/userList': (context) => const UserListPage(),
+        '/familiarHome': (context) => const FamiliarHomePage(),
+        '/adultHome': (context) => const AdultHomePages(),
+      },
     );
   }
 }
