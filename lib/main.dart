@@ -24,7 +24,6 @@ import 'package:bymax/pages/familiarHomePage.dart';
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   print("Mensaje en segundo plano recibido: ${message.messageId}");
-  // Aquí puedes agregar más lógica para manejar la notificación en segundo plano
 }
 
 Future<void> main() async {

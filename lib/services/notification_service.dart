@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-
+import 'dart:async';
 import 'package:bymax/controllers/recordatoryController.dart';
 import 'package:bymax/services/tts_service.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -88,6 +88,10 @@ class NotificationService {
   final Map<int, int> _scheduledNotifications =
       {}; // <notificationId, recordatorioId>
 
+  // Timer para verificación automática
+  Timer? _checkTimer;
+  late TTSService _ttsService;
+
   // Constantes para canales de notificación
   static const AndroidNotificationChannel _highImportanceChannel =
       AndroidNotificationChannel(
@@ -146,7 +150,107 @@ class NotificationService {
     // Configurar FCM para recibir notificaciones en segundo plano
     await _setupFCMForBackgroundMessages();
 
-    print('Servicio de notificaciones inicializado');
+    await _setupAlarmChannel();
+
+    // Inicializar TTS Service
+    _ttsService = TTSService();
+    await _ttsService.initTTS();
+
+    // Iniciar verification automática cada minuto
+    _startAutomaticCheck();
+
+    print(
+      'Servicio de notificaciones inicializado con TTS y verificación automática',
+    );
+  }
+
+  // Iniciar verificación automática
+  void _startAutomaticCheck() {
+    _checkTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      _checkExactTimeRecordatories();
+    });
+  }
+
+  // Verificar recordatorios en tiempo exacto
+  Future<void> _checkExactTimeRecordatories() async {
+    try {
+      final recordatoryController = Get.find<RecordatoryController>();
+      final now = DateTime.now();
+
+      for (final recordatory in recordatoryController.recordatories) {
+        if (!recordatory.isRead && recordatory.isNotificationEnabled) {
+          // Parsear fecha y hora
+          final dateTimeParts = recordatory.date.split('/');
+          final timeParts = recordatory.time.split(':');
+
+          if (dateTimeParts.length == 3 && timeParts.length == 2) {
+            final day = int.parse(dateTimeParts[0]);
+            final month = int.parse(dateTimeParts[1]);
+            final year = int.parse(dateTimeParts[2]);
+            final hour = int.parse(timeParts[0]);
+            final minute = int.parse(timeParts[1]);
+
+            final scheduledDate = DateTime(year, month, day, hour, minute);
+
+            // Verificar si es exactamente la hora (con margen de 1 minuto)
+            final difference = now.difference(scheduledDate).abs();
+
+            if (difference.inMinutes == 0 ||
+                (now.isAfter(scheduledDate) && difference.inMinutes <= 1)) {
+              print(
+                '¡Activando recordatorio en tiempo exacto: ${recordatory.title}',
+              );
+
+              // Mostrar notificación inmediatamente
+              await showLocalNotification(
+                recordatory.id,
+                '🚨 RECORDATORIO ACTIVO',
+                recordatory.title,
+                recordatory.id.toString(),
+              );
+
+              // Activar alarma con TTS
+              await _triggerRecordatoryAlarmImmediate(recordatory.id);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error en verificación automática: $e');
+    }
+  }
+
+  // Activar recordatorio inmediatamente con TTS
+  Future<void> _triggerRecordatoryAlarmImmediate(int recordatoryId) async {
+    try {
+      final recordatoryController = Get.find<RecordatoryController>();
+      final recordatory = recordatoryController.findRecordatoryById(
+        recordatoryId,
+      );
+
+      if (recordatory != null) {
+        // Marcar como leído
+        recordatoryController.markRecordatoryAsRead(recordatoryId);
+
+        // Texto para reproducir con más énfasis
+        String textToSpeak = "¡ATENCIÓN! Recordatorio importante. ";
+        textToSpeak += "${recordatory.title}. ";
+        textToSpeak +=
+            "Programado para hoy ${recordatory.date} a las ${recordatory.time}.";
+
+        // Usar speakAsAlarm para reproducir con repeticiones
+        await _ttsService.speakAsAlarm(textToSpeak);
+
+        // Mostrar la pantalla automáticamente si la app está en primer plano
+        if (Get.context != null) {
+          Get.toNamed('/adultHomePage');
+        }
+
+        print('Recordatorio activado con alarma TTS: ${recordatory.title}');
+      }
+    } catch (e) {
+      print('Error al activar recordatorio inmediato: $e');
+    }
   }
 
   // NUEVO: Configurar FCM para mensajes en segundo plano
@@ -176,6 +280,127 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.createNotificationChannel(_highImportanceChannel);
+  }
+
+  // NUEVO: Programar recordatorio como alarma automática
+  Future<void> scheduleRecordatoryAlarm(Recordatory recordatorio) async {
+    try {
+      // Convertir fecha y hora del recordatorio a DateTime
+      final dateTimeParts = recordatorio.date.split('/');
+      final timeParts = recordatorio.time.split(':');
+
+      if (dateTimeParts.length != 3 || timeParts.length != 2) {
+        print('Formato de fecha u hora inválido');
+        return;
+      }
+
+      final day = int.parse(dateTimeParts[0]);
+      final month = int.parse(dateTimeParts[1]);
+      final year = int.parse(dateTimeParts[2]);
+      final hour = int.parse(timeParts[0]);
+      final minute = int.parse(timeParts[1]);
+
+      final scheduledDate = DateTime(year, month, day, hour, minute);
+
+      // Verificar si la fecha ya pasó
+      if (scheduledDate.isBefore(DateTime.now())) {
+        print(
+          'La fecha del recordatorio ya pasó: ${recordatorio.date} ${recordatorio.time}',
+        );
+        return;
+      }
+
+      // Crear zona horaria local
+      final scheduledTzDate = tz.TZDateTime.from(scheduledDate, tz.local);
+
+      // ID único para la alarma
+      final alarmId =
+          recordatorio.id + 10000; // Diferente de notificaciones normales
+
+      // Configurar detalles de la alarma con máxima prioridad
+      final AndroidNotificationDetails
+      androidDetails = AndroidNotificationDetails(
+        'alarm_channel', // Canal específico para alarmas
+        'Alarmas de Recordatorios',
+        channelDescription: 'Alarmas automáticas de recordatorios importantes',
+        importance: Importance.max,
+        priority: Priority.high,
+        ticker: '🚨 RECORDATORIO ACTIVO',
+        styleInformation: BigTextStyleInformation(
+          '🚨 ${recordatorio.title}\n📅 ${recordatorio.date} ⏰ ${recordatorio.time}',
+          contentTitle: '🚨 RECORDATORIO ACTIVO',
+          summaryText: 'Toca para detener',
+        ),
+        fullScreenIntent: true, // Mostrar en pantalla completa
+        category: AndroidNotificationCategory.alarm,
+        visibility: NotificationVisibility.public,
+        ongoing: true, // No se puede deslizar para cerrar
+        autoCancel: false, // No se cierra automáticamente
+        showWhen: true,
+        enableLights: true,
+        enableVibration: true,
+        playSound: true,
+        sound: RawResourceAndroidNotificationSound(
+          'alarm_sound',
+        ), // Sonido de alarma
+        vibrationPattern: Int64List.fromList([
+          0,
+          1000,
+          500,
+          1000,
+          500,
+          1000,
+          500,
+          1000,
+        ]),
+      );
+
+      final NotificationDetails notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          sound: 'alarm_sound.aiff',
+        ),
+      );
+
+      // Programar la alarma
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        alarmId,
+        '🚨 RECORDATORIO ACTIVO',
+        '${recordatorio.title}\n📅 ${recordatorio.date} ⏰ ${recordatorio.time}',
+        scheduledTzDate,
+        notificationDetails,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: 'alarm_${recordatorio.id}',
+      );
+
+      print(
+        'Alarma programada para: ${recordatorio.title} a las ${recordatorio.time} del ${recordatorio.date}',
+      );
+    } catch (e) {
+      print('Error al programar alarma: $e');
+    }
+  }
+
+  // NUEVO: Crear canal de alarmas
+  Future<void> _setupAlarmChannel() async {
+    const AndroidNotificationChannel alarmChannel = AndroidNotificationChannel(
+      'alarm_channel',
+      'Alarmas de Recordatorios',
+      description: 'Alarmas automáticas de recordatorios importantes',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    );
+
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(alarmChannel);
   }
 
   Future<void> _requestNotificationPermissions() async {
@@ -313,34 +538,8 @@ class NotificationService {
   }
 
   void _triggerRecordatoryAlarm(int recordatoryId) {
-    // Usar GetX para acceder al controlador de recordatorios
-    final recordatoryController = Get.find<RecordatoryController>();
-
-    // Buscar el recordatorio específico
-    final recordatory = recordatoryController.findRecordatoryById(
-      recordatoryId,
-    );
-
-    if (recordatory != null) {
-      // Marcar como leído
-      recordatoryController.markRecordatoryAsRead(recordatoryId);
-
-      // Reproducir audio automáticamente
-      final ttsService = TTSService();
-
-      // Texto para reproducir
-      String textToSpeak = "Recordatorio: ${recordatory.title}. ";
-      textToSpeak += "Fecha: ${recordatory.date}. ";
-      textToSpeak += "Hora: ${recordatory.time}.";
-
-      // Reproducir el texto
-      ttsService.speak(textToSpeak);
-
-      // Si la app está en primer plano, navegar a la vista de recordatorios
-      if (Get.context != null) {
-        Get.toNamed('/adultHomePage');
-      }
-    }
+    // Usar el método inmediato con TTS
+    _triggerRecordatoryAlarmImmediate(recordatoryId);
   }
 
   // Manejador para cuando la app se abre desde una notificación FCM
@@ -610,5 +809,11 @@ class NotificationService {
     final token = await FirebaseMessaging.instance.getToken();
     print('Token FCM: $token');
     return token;
+  }
+
+  // Método para limpiar recursos
+  void dispose() {
+    _checkTimer?.cancel();
+    _ttsService.dispose();
   }
 }

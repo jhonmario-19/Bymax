@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:vibration/vibration.dart';
 import '../controllers/recordatoryController.dart';
 import '../controllers/loginController.dart';
 import '../models/recordatoryModel.dart';
@@ -23,10 +24,18 @@ class _AdultHomePageState extends State<AdultHomePages> {
   final ScrollController _scrollController = ScrollController();
   final TTSService _ttsService = TTSService();
   int? _speakingRecordatoryId;
-  bool _isInitialized = false; // Bandera para controlar la inicialización
-  String? _debugUserId; // Para depuración
+  bool _isInitialized = false;
+  String? _debugUserId;
   Timer? _periodicCheckTimer;
   final NotificationService _notificationService = NotificationService();
+  Map<int, int> _recordatoryRepeatCount = {};
+  Map<int, Timer?> _repeatTimers = {};
+
+  // CAMBIO 1: Cambiar a Set<String> para almacenar recordatorios únicos por fecha+hora+id
+  Set<String> _processedRecordatoriesKeys = {};
+
+  bool _isRepeatingStopped = false;
+  bool _manualStopRequested = false;
 
   @override
   void initState() {
@@ -36,6 +45,11 @@ class _AdultHomePageState extends State<AdultHomePages> {
     _configureNotifications();
     _startPeriodicCheck();
     _checkForMissedNotifications();
+
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print('📱 App abierta desde notificación: ${message.data}');
+      _forceRefreshAndCheck();
+    });
   }
 
   @override
@@ -52,8 +66,8 @@ class _AdultHomePageState extends State<AdultHomePages> {
   }
 
   void _startPeriodicCheck() {
-    // Verificar cada minuto si hay recordatorios que deban activarse
-    _periodicCheckTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+    _periodicCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      print('⏰ Verificación periódica ejecutándose...');
       _checkCurrentTimeRecordatories();
     });
   }
@@ -61,6 +75,60 @@ class _AdultHomePageState extends State<AdultHomePages> {
   Future<void> _initializeApp() async {
     await _loadUserInfo();
     _setupForegroundNotificationHandling();
+  }
+
+  Future<void> _forceRefreshAndCheck() async {
+    print('🔄 Forzando actualización y verificación...');
+    await _refreshRecordatorios();
+    _checkCurrentTimeRecordatories();
+  }
+
+  // CAMBIO 2: Generar una clave única para cada recordatorio
+  String _generateRecordatoryKey(Recordatory recordatory) {
+    return '${recordatory.id}_${recordatory.date}_${recordatory.time}';
+  }
+
+  // CAMBIO 3: Verificar si un recordatorio ya fue procesado o si ya pasó su hora
+  bool _shouldProcessRecordatory(Recordatory recordatory, DateTime now) {
+    // Generar clave única
+    final key = _generateRecordatoryKey(recordatory);
+
+    // Si ya fue procesado, no procesarlo de nuevo
+    if (_processedRecordatoriesKeys.contains(key)) {
+      return false;
+    }
+
+    // Parsear la fecha y hora del recordatorio
+    try {
+      final dateParts = recordatory.date.split('/');
+      final timeParts = recordatory.time.split(':');
+
+      if (dateParts.length != 3 || timeParts.length != 2) {
+        return false;
+      }
+
+      final recordatoryDateTime = DateTime(
+        int.parse(dateParts[2]), // año
+        int.parse(dateParts[1]), // mes
+        int.parse(dateParts[0]), // día
+        int.parse(timeParts[0]), // hora
+        int.parse(timeParts[1]), // minuto
+      );
+
+      // Si el recordatorio es de una fecha/hora pasada (más de 2 minutos), no procesarlo
+      final timeDifference = now.difference(recordatoryDateTime);
+      if (timeDifference.inMinutes > 2) {
+        print(
+          '⚠️ Recordatorio demasiado antiguo: ${recordatory.title} - ${timeDifference.inMinutes} minutos de diferencia',
+        );
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      print('Error al parsear fecha/hora del recordatorio: $e');
+      return false;
+    }
   }
 
   void _checkCurrentTimeRecordatories() async {
@@ -71,51 +139,255 @@ class _AdultHomePageState extends State<AdultHomePages> {
       listen: false,
     );
 
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await recordatoryController.fetchRecordatoriesForUser(user.uid);
+    }
+
     final now = DateTime.now();
     final currentTimeString =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
     final currentDateString =
         '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
 
-    // Filtrar recordatorios no leídos que coincidan con la fecha/hora actual
+    print(
+      'Verificando recordatorios para: $currentDateString $currentTimeString',
+    );
+
+    // CAMBIO CRÍTICO: Marcar como leídos los recordatorios vencidos PRIMERO
+    await _markPastRecordatoriesAsRead(recordatoryController);
+
+    // Limpiar recordatorios antiguos procesados
+    _cleanOldProcessedRecordatories(now);
+
+    // AHORA sí buscar recordatorios activos (después de marcar vencidos)
     final activeRecordatories =
-        recordatoryController.recordatories
-            .where(
-              (r) =>
-                  !r.isRead &&
-                  r.date == currentDateString &&
-                  r.time == currentTimeString,
-            )
-            .toList();
+        recordatoryController.recordatories.where((r) {
+          // Solo recordatorios no leídos
+          if (r.isRead) return false;
 
-    if (activeRecordatories.isNotEmpty) {
-      // Ordenar por ID (asumimos que IDs mayores son más recientes)
+          // Solo recordatorios de hoy y hora actual
+          if (r.date != currentDateString || r.time != currentTimeString)
+            return false;
+
+          // Verificación más estricta del tiempo
+          if (!_isRecordatoryActiveNow(r, now)) return false;
+
+          // Verificar que no haya sido procesado
+          final key = _generateRecordatoryKey(r);
+          if (_processedRecordatoriesKeys.contains(key)) return false;
+
+          // No debe estar ya en repetición
+          if (_recordatoryRepeatCount.containsKey(r.id)) return false;
+
+          return true;
+        }).toList();
+
+    print('Recordatorios activos encontrados: ${activeRecordatories.length}');
+
+    if (activeRecordatories.isNotEmpty && !_manualStopRequested) {
       activeRecordatories.sort((a, b) => b.id.compareTo(a.id));
-
       final mostRecent = activeRecordatories.first;
-      _speakRecordatoryAsAlarm(mostRecent);
 
-      // Marcar como leído
+      print('Activando recordatorio: ${mostRecent.title}');
+
+      // Marcar como procesado
+      final key = _generateRecordatoryKey(mostRecent);
+      _processedRecordatoriesKeys.add(key);
+
+      _recordatoryRepeatCount[mostRecent.id] = 0;
+
+      await _notificationService.showLocalNotification(
+        mostRecent.id + 9999,
+        '🚨 RECORDATORIO ACTIVO',
+        mostRecent.title,
+        mostRecent.id.toString(),
+      );
+
+      _startRecordatoryRepetition(mostRecent);
       recordatoryController.markRecordatoryAsRead(mostRecent.id);
+
+      try {
+        if (await Vibration.hasVibrator() ?? false) {
+          Vibration.vibrate(pattern: [0, 1000, 500, 1000, 500, 1000]);
+        }
+      } catch (e) {
+        print('Error al vibrar: $e');
+      }
+    }
+  }
+
+  bool _isRecordatoryActiveNow(Recordatory recordatory, DateTime now) {
+    try {
+      final dateParts = recordatory.date.split('/');
+      final timeParts = recordatory.time.split(':');
+
+      if (dateParts.length != 3 || timeParts.length != 2) {
+        return false;
+      }
+
+      final recordatoryDateTime = DateTime(
+        int.parse(dateParts[2]), // año
+        int.parse(dateParts[1]), // mes
+        int.parse(dateParts[0]), // día
+        int.parse(timeParts[0]), // hora
+        int.parse(timeParts[1]), // minuto
+      );
+
+      final timeDifference = now.difference(recordatoryDateTime);
+
+      // CAMBIO CRÍTICO: Ventana más estricta - solo 60 segundos después
+      if (timeDifference.inSeconds < 0 || timeDifference.inSeconds > 60) {
+        if (timeDifference.inSeconds > 60) {
+          print(
+            '⚠️ Recordatorio fuera de ventana (${timeDifference.inSeconds}s): ${recordatory.title}',
+          );
+        }
+        return false;
+      }
+
+      print(
+        '✅ Recordatorio activo (${timeDifference.inSeconds}s): ${recordatory.title}',
+      );
+      return true;
+    } catch (e) {
+      print('Error al verificar tiempo del recordatorio: $e');
+      return false;
+    }
+  }
+
+  void _cleanOldProcessedRecordatories(DateTime now) {
+    final keysToRemove = <String>[];
+
+    for (String key in _processedRecordatoriesKeys) {
+      try {
+        // Extraer información de la clave (formato: id_dd/mm/yyyy_hh:mm)
+        final parts = key.split('_');
+        if (parts.length >= 3) {
+          final datePart = parts[1]; // dd/mm/yyyy
+          final timePart = parts[2]; // hh:mm
+
+          final dateParts = datePart.split('/');
+          final timeParts = timePart.split(':');
+
+          if (dateParts.length == 3 && timeParts.length == 2) {
+            final recordatoryDateTime = DateTime(
+              int.parse(dateParts[2]), // año
+              int.parse(dateParts[1]), // mes
+              int.parse(dateParts[0]), // día
+              int.parse(timeParts[0]), // hora
+              int.parse(timeParts[1]), // minuto
+            );
+
+            // Si han pasado más de 5 minutos, remover de la lista
+            if (now.difference(recordatoryDateTime).inMinutes >= 5) {
+              keysToRemove.add(key);
+            }
+          }
+        }
+      } catch (e) {
+        // Si hay error al parsear, remover la clave
+        keysToRemove.add(key);
+      }
+    }
+
+    for (String key in keysToRemove) {
+      _processedRecordatoriesKeys.remove(key);
+    }
+
+    if (keysToRemove.isNotEmpty) {
+      print(
+        'Limpiados ${keysToRemove.length} recordatorios procesados antiguos',
+      );
+    }
+  }
+
+  void _startRecordatoryRepetition(Recordatory recordatory) {
+    _manualStopRequested = false;
+
+    _speakRecordatoryAsAlarm(recordatory);
+    _recordatoryRepeatCount[recordatory.id] = 1;
+
+    _repeatTimers[recordatory
+        .id] = Timer.periodic(const Duration(seconds: 60), (timer) {
+      if (!mounted || _manualStopRequested) {
+        timer.cancel();
+        _repeatTimers.remove(recordatory.id);
+        _recordatoryRepeatCount.remove(recordatory.id);
+        _manualStopRequested = false;
+        return;
+      }
+
+      final currentCount = _recordatoryRepeatCount[recordatory.id] ?? 0;
+
+      if (currentCount < 3) {
+        print(
+          'Repetición ${currentCount + 1} del recordatorio: ${recordatory.title}',
+        );
+        _speakRecordatoryAsAlarm(recordatory);
+        _recordatoryRepeatCount[recordatory.id] = currentCount + 1;
+        _vibrateDevice();
+      } else {
+        print(
+          'Recordatorio completado después de 3 repeticiones: ${recordatory.title}',
+        );
+        timer.cancel();
+        _repeatTimers.remove(recordatory.id);
+        _recordatoryRepeatCount.remove(recordatory.id);
+      }
+    });
+  }
+
+  void _stopAllActiveRecordatories() {
+    print('🛑 Parando todos los recordatorios activos');
+
+    _ttsService.stop();
+
+    for (final timer in _repeatTimers.values) {
+      timer?.cancel();
+    }
+
+    _repeatTimers.clear();
+    _recordatoryRepeatCount.clear();
+    _manualStopRequested = true;
+
+    setState(() {
+      _speakingRecordatoryId = null;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Recordatorios detenidos'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  void _vibrateDevice() async {
+    try {
+      if (await Vibration.hasVibrator() ?? false) {
+        Vibration.vibrate(pattern: [0, 500, 200, 500]);
+      }
+    } catch (e) {
+      print('Error al vibrar: $e');
     }
   }
 
   void _speakRecordatoryAsAlarm(Recordatory recordatory) async {
-    // Construir el texto para hablar
     String textToSpeak =
         "¡Atención! Recordatorio importante: ${recordatory.title}. ";
     textToSpeak += "Fecha: ${recordatory.date}. ";
     textToSpeak += "Hora: ${recordatory.time}.";
 
-    // Actualizar el estado y hablar en modo alarma
     setState(() {
       _speakingRecordatoryId = recordatory.id;
     });
 
-    // Usar el nuevo método de TTS para reproducir como alarma
     await _ttsService.speakAsAlarm(textToSpeak);
 
-    // Cuando termina, actualizar estado
     if (!_ttsService.isSpeaking && mounted) {
       setState(() {
         _speakingRecordatoryId = null;
@@ -129,14 +401,11 @@ class _AdultHomePageState extends State<AdultHomePages> {
       listen: false,
     );
 
-    // Encontrar índice del recordatorio
     final index = recordatoryController.recordatories.indexOf(recordatory);
     if (index != -1) {
-      // Calcular posición aproximada
-      final itemHeight = 120.0; // Altura estimada del elemento de recordatorio
+      final itemHeight = 120.0;
       final offset = index * itemHeight;
 
-      // Desplazar con animación
       _scrollController.animateTo(
         offset,
         duration: const Duration(milliseconds: 500),
@@ -145,7 +414,6 @@ class _AdultHomePageState extends State<AdultHomePages> {
     }
   }
 
-  // Configurar permisos de notificaciones
   Future<void> _configureNotifications() async {
     await FirebaseMessaging.instance.requestPermission(
       alert: true,
@@ -165,10 +433,8 @@ class _AdultHomePageState extends State<AdultHomePages> {
         listen: false,
       );
 
-      // Verificar notificaciones pendientes de Firebase
       await recordatoryController.checkPendingNotifications();
 
-      // Reprogramar notificaciones locales si es necesario
       if (recordatoryController.recordatories.isNotEmpty) {
         await recordatoryController.rescheduleAllNotifications();
       }
@@ -185,7 +451,6 @@ class _AdultHomePageState extends State<AdultHomePages> {
     }
   }
 
-  // Inicializar el servicio TTS
   Future<void> _initializeTTS() async {
     await _ttsService.initTTS();
   }
@@ -193,6 +458,14 @@ class _AdultHomePageState extends State<AdultHomePages> {
   @override
   void dispose() {
     _periodicCheckTimer?.cancel();
+
+    for (final timer in _repeatTimers.values) {
+      timer?.cancel();
+    }
+    _repeatTimers.clear();
+    _recordatoryRepeatCount.clear();
+    _processedRecordatoriesKeys.clear(); // CAMBIO 8: Limpiar el nuevo Set
+
     _scrollController.dispose();
     _ttsService.dispose();
     super.dispose();
@@ -225,15 +498,24 @@ class _AdultHomePageState extends State<AdultHomePages> {
             listen: false,
           );
 
-          // Cargar recordatorios y verificar notificaciones
-          await Future.wait([
-            recordatoryController.fetchRecordatoriesForUser(user.uid),
-            _checkForMissedNotifications(), // Verificación añadida aquí
-          ]);
+          // Cargar recordatorios
+          await recordatoryController.fetchRecordatoriesForUser(user.uid);
+
+          // CAMBIO 8: Marcar como leídos los vencidos inmediatamente después de cargar
+          await _markPastRecordatoriesAsRead(recordatoryController);
+
+          // Verificar notificaciones perdidas
+          await _checkForMissedNotifications();
+
+          // Programar alarmas solo para recordatorios válidos
+          await recordatoryController.scheduleAllAlarmsForUser(user.uid);
 
           print(
             'Recordatorios cargados: ${recordatoryController.recordatories.length}',
           );
+
+          // Verificar recordatorios actuales
+          _checkCurrentTimeRecordatories();
 
           setState(() {
             _loadingUser = false;
@@ -260,7 +542,6 @@ class _AdultHomePageState extends State<AdultHomePages> {
     }
   }
 
-  // Método para forzar recarga de recordatorios (útil para depuración)
   Future<void> _refreshRecordatorios() async {
     try {
       setState(() {
@@ -274,8 +555,13 @@ class _AdultHomePageState extends State<AdultHomePages> {
           listen: false,
         );
 
-        // Intentar ambos métodos para encontrar recordatorios
+        // Primero obtener los recordatorios
         await recordatoryController.fetchRecordatoriesForUser(user.uid);
+
+        // CAMBIO 6: Inmediatamente marcar como leídos los recordatorios vencidos
+        await _markPastRecordatoriesAsRead(recordatoryController);
+
+        // Luego reprogramar notificaciones solo para recordatorios válidos
         await recordatoryController.rescheduleAllNotifications();
       }
 
@@ -290,10 +576,82 @@ class _AdultHomePageState extends State<AdultHomePages> {
     }
   }
 
+  Future<void> _markPastRecordatoriesAsRead(
+    RecordatoryController recordatoryController,
+  ) async {
+    final now = DateTime.now();
+    final recordatoriesToMarkAsRead = <Recordatory>[];
+
+    for (final recordatory in recordatoryController.recordatories) {
+      // Solo procesar recordatorios no leídos
+      if (!recordatory.isRead) {
+        try {
+          final dateParts = recordatory.date.split('/');
+          final timeParts = recordatory.time.split(':');
+
+          if (dateParts.length == 3 && timeParts.length == 2) {
+            final recordatoryDateTime = DateTime(
+              int.parse(dateParts[2]), // año
+              int.parse(dateParts[1]), // mes
+              int.parse(dateParts[0]), // día
+              int.parse(timeParts[0]), // hora
+              int.parse(timeParts[1]), // minuto
+            );
+
+            final timeDifference = now.difference(recordatoryDateTime);
+
+            // CAMBIO 5: Marcar como leído si han pasado más de 2 minutos O si es de un día anterior
+            bool shouldMarkAsRead = false;
+
+            if (timeDifference.inMinutes > 2) {
+              shouldMarkAsRead = true;
+              print(
+                '⏰ Recordatorio vencido por tiempo: ${recordatory.title} - ${timeDifference.inMinutes} min',
+              );
+            } else if (recordatoryDateTime.day < now.day ||
+                recordatoryDateTime.month < now.month ||
+                recordatoryDateTime.year < now.year) {
+              shouldMarkAsRead = true;
+              print('⏰ Recordatorio de día anterior: ${recordatory.title}');
+            }
+
+            if (shouldMarkAsRead) {
+              recordatoriesToMarkAsRead.add(recordatory);
+            }
+          }
+        } catch (e) {
+          print(
+            'Error al parsear fecha/hora del recordatorio ${recordatory.id}: $e',
+          );
+          // En caso de error, marcarlo como leído para evitar problemas
+          recordatoriesToMarkAsRead.add(recordatory);
+        }
+      }
+    }
+
+    // Marcar todos los recordatorios vencidos como leídos
+    for (final recordatory in recordatoriesToMarkAsRead) {
+      try {
+        await recordatoryController.markRecordatoryAsRead(recordatory.id);
+        print('✅ Marcado como leído: ${recordatory.title}');
+      } catch (e) {
+        print('Error al marcar recordatorio ${recordatory.id} como leído: $e');
+      }
+    }
+
+    if (recordatoriesToMarkAsRead.isNotEmpty) {
+      print(
+        '✅ Se marcaron ${recordatoriesToMarkAsRead.length} recordatorios vencidos como leídos',
+      );
+    }
+  }
+
   void _setupForegroundNotificationHandling() {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      // Verificar notificaciones pendientes cuando llega una nueva
-      await _checkForMissedNotifications();
+      print('📱 Notificación recibida en primer plano: ${message.data}');
+
+      await _refreshRecordatorios();
+      _checkCurrentTimeRecordatories();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -319,11 +677,9 @@ class _AdultHomePageState extends State<AdultHomePages> {
   }
 
   void _speakRecordatory(Recordatory recordatory) async {
-    // Si ya estamos hablando, detener primero
     if (_ttsService.isSpeaking) {
       await _ttsService.stop();
 
-      // Si es el mismo recordatorio, solo detener
       if (_speakingRecordatoryId == recordatory.id) {
         setState(() {
           _speakingRecordatoryId = null;
@@ -332,17 +688,14 @@ class _AdultHomePageState extends State<AdultHomePages> {
       }
     }
 
-    // Construir el texto para hablar
     String textToSpeak = "Recordatorio: ${recordatory.title}. ";
     textToSpeak += "Fecha: ${recordatory.date}. ";
     textToSpeak += "Hora: ${recordatory.time}.";
 
-    // Actualizar el estado y hablar
     setState(() {
       _speakingRecordatoryId = recordatory.id;
     });
 
-    // Marcar como leído si no lo está
     final recordatoryController = Provider.of<RecordatoryController>(
       context,
       listen: false,
@@ -353,7 +706,6 @@ class _AdultHomePageState extends State<AdultHomePages> {
 
     await _ttsService.speak(textToSpeak);
 
-    // Cuando termina de hablar, actualizar el estado
     if (!_ttsService.isSpeaking && mounted) {
       setState(() {
         _speakingRecordatoryId = null;
@@ -362,7 +714,6 @@ class _AdultHomePageState extends State<AdultHomePages> {
   }
 
   void _handleNotificationTap(int recordatoryId) {
-    // Buscar el recordatorio en la lista
     final recordatoryController = Provider.of<RecordatoryController>(
       context,
       listen: false,
@@ -383,18 +734,13 @@ class _AdultHomePageState extends State<AdultHomePages> {
     );
 
     if (recordatory.id != -1) {
-      // Marcar como leído y reproducir audio
       recordatoryController.markRecordatoryAsRead(recordatory.id);
       _speakRecordatory(recordatory);
 
-      // Opcional: desplazar hasta el recordatorio en la lista
       final index = recordatoryController.recordatories.indexOf(recordatory);
       if (index != -1) {
-        // Calcular la posición aproximada
-        final scrollOffset =
-            index * 100.0; // Ajusta según la altura del elemento
+        final scrollOffset = index * 100.0;
 
-        // Desplazar con animación
         _scrollController.animateTo(
           scrollOffset,
           duration: const Duration(milliseconds: 500),
@@ -504,7 +850,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
                 children: [
                   const SizedBox(height: 10),
 
-                  // Logo Bymax
+                  // Logo Bymax con botón de parar
                   Row(
                     children: [
                       Container(
@@ -527,6 +873,34 @@ class _AdultHomePageState extends State<AdultHomePages> {
                         ),
                       ),
                       const Spacer(),
+                      // NUEVO: Botón para parar recordatorios activos
+                      if (_recordatoryRepeatCount.isNotEmpty ||
+                          _speakingRecordatoryId != null)
+                        GestureDetector(
+                          onTap: _stopAllActiveRecordatories,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.8),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.stop, color: Colors.white, size: 16),
+                                SizedBox(width: 4),
+                                Text(
+                                  'PARAR',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
                   ),
 

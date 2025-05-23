@@ -1010,6 +1010,25 @@ class RecordatoryController extends ChangeNotifier {
     }
   }
 
+  Future<void> scheduleAllAlarmsForUser(String userId) async {
+    try {
+      final notificationService = NotificationService();
+
+      // Programar alarmas para todos los recordatorios no leídos
+      for (final recordatorio in _recordatories) {
+        if (!recordatorio.isRead) {
+          await notificationService.scheduleRecordatoryAlarm(recordatorio);
+        }
+      }
+
+      print(
+        '${_recordatories.length} alarmas programadas para el usuario $userId',
+      );
+    } catch (e) {
+      print('Error al programar alarmas: $e');
+    }
+  }
+
   // Método para refrescar la lista de usuarios explícitamente
   Future<void> refreshUsers() async {
     await _fetchUsers();
