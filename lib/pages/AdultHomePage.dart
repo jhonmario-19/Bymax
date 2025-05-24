@@ -30,8 +30,8 @@ class _AdultHomePageState extends State<AdultHomePages> {
   final NotificationService _notificationService = NotificationService();
   Map<int, int> _recordatoryRepeatCount = {};
   Map<int, Timer?> _repeatTimers = {};
+  bool _manualRefreshExecuted = false;
 
-  // CAMBIO 1: Cambiar a Set<String> para almacenar recordatorios únicos por fecha+hora+id
   Set<String> _processedRecordatoriesKeys = {};
 
   bool _isRepeatingStopped = false;
@@ -66,7 +66,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
   }
 
   void _startPeriodicCheck() {
-    _periodicCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+    _periodicCheckTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       print('⏰ Verificación periódica ejecutándose...');
       _checkCurrentTimeRecordatories();
     });
@@ -83,12 +83,10 @@ class _AdultHomePageState extends State<AdultHomePages> {
     _checkCurrentTimeRecordatories();
   }
 
-  // CAMBIO 2: Generar una clave única para cada recordatorio
   String _generateRecordatoryKey(Recordatory recordatory) {
     return '${recordatory.id}_${recordatory.date}_${recordatory.time}';
   }
 
-  // CAMBIO 3: Verificar si un recordatorio ya fue procesado o si ya pasó su hora
   bool _shouldProcessRecordatory(Recordatory recordatory, DateTime now) {
     // Generar clave única
     final key = _generateRecordatoryKey(recordatory);
@@ -320,7 +318,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
 
       final currentCount = _recordatoryRepeatCount[recordatory.id] ?? 0;
 
-      if (currentCount < 3) {
+      if (currentCount < 1) {
         print(
           'Repetición ${currentCount + 1} del recordatorio: ${recordatory.title}',
         );
@@ -329,7 +327,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
         _vibrateDevice();
       } else {
         print(
-          'Recordatorio completado después de 3 repeticiones: ${recordatory.title}',
+          'Recordatorio completado después de 1 repeticion: ${recordatory.title}',
         );
         timer.cancel();
         _repeatTimers.remove(recordatory.id);
@@ -585,6 +583,16 @@ class _AdultHomePageState extends State<AdultHomePages> {
     for (final recordatory in recordatoryController.recordatories) {
       // Solo procesar recordatorios no leídos
       if (!recordatory.isRead) {
+        // NUEVO: Verificar si ya fue procesado (ya sonó y posiblemente fue detenido)
+        final key = _generateRecordatoryKey(recordatory);
+        if (_processedRecordatoriesKeys.contains(key)) {
+          recordatoriesToMarkAsRead.add(recordatory);
+          print(
+            '🔄 Marcando como leído recordatorio ya procesado: ${recordatory.title}',
+          );
+          continue;
+        }
+
         try {
           final dateParts = recordatory.date.split('/');
           final timeParts = recordatory.time.split(':');
@@ -600,7 +608,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
 
             final timeDifference = now.difference(recordatoryDateTime);
 
-            // CAMBIO 5: Marcar como leído si han pasado más de 2 minutos O si es de un día anterior
+            // Marcar como leído si han pasado más de 2 minutos O si es de un día anterior
             bool shouldMarkAsRead = false;
 
             if (timeDifference.inMinutes > 2) {

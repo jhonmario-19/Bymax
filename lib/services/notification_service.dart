@@ -627,7 +627,7 @@ class NotificationService {
         if (scheduledDate.day == now.day &&
             scheduledDate.month == now.month &&
             scheduledDate.year == now.year &&
-            difference.inMinutes < 15) {
+            difference.inMinutes < 2) {
           // Mostrar inmediatamente como una alarma con el TTS
           showLocalNotification(
             recordatorio.id,
@@ -785,17 +785,6 @@ class NotificationService {
     } catch (e) {
       print('Error al cargar notificaciones programadas: $e');
     }
-  }
-
-  // Enviar notificación de prueba (útil para depuración)
-  Future<void> sendTestNotification() async {
-    await showLocalNotification(
-      0,
-      'Prueba de notificación',
-      'Esta es una notificación de prueba',
-      null,
-    );
-    print('Notificación de prueba enviada');
   }
 
   // Suscribirse a un tema para recibir notificaciones grupales

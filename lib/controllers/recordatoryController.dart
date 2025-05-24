@@ -45,6 +45,9 @@ class RecordatoryController extends ChangeNotifier {
   // Nuevo método para inicializar notificaciones
   Future<void> _initNotifications() async {
     await _notificationService.init();
+    Timer.periodic(const Duration(minutes: 5), (_) {
+      _cleanupExpiredRecordatories();
+    });
 
     // Programar notificaciones para recordatorios existentes
     if (_recordatories.isNotEmpty) {
@@ -547,6 +550,9 @@ class RecordatoryController extends ChangeNotifier {
       _isLoadingUsers = false;
       _users = [];
       notifyListeners();
+      if (_initialLoadComplete) {
+        _cleanupExpiredRecordatories();
+      }
     }
   }
 
@@ -985,6 +991,7 @@ class RecordatoryController extends ChangeNotifier {
           '${futureRecordatories.length} notificaciones reprogramadas al iniciar sesión',
         );
       }
+      await _cleanupExpiredRecordatories();
     } catch (e) {
       print('Error al verificar notificaciones perdidas: $e');
     }
@@ -1026,6 +1033,153 @@ class RecordatoryController extends ChangeNotifier {
       );
     } catch (e) {
       print('Error al programar alarmas: $e');
+    }
+  }
+
+  Future<void> _cleanupExpiredRecordatories() async {
+    try {
+      final now = DateTime.now();
+      final recordatoriesToRemove = <Recordatory>[];
+      final recordatoriesToUpdate = <Recordatory>[];
+
+      for (final recordatory in _recordatories) {
+        final dateParts = recordatory.date.split('/');
+        final timeParts = recordatory.time.split(':');
+
+        if (dateParts.length != 3 || timeParts.length != 2) continue;
+
+        try {
+          final day = int.parse(dateParts[0]);
+          final month = int.parse(dateParts[1]);
+          final year = int.parse(dateParts[2]);
+          final hour = int.parse(timeParts[0]);
+          final minute = int.parse(timeParts[1]);
+
+          final recordatoryDateTime = DateTime(year, month, day, hour, minute);
+          final fiveMinutesAfter = recordatoryDateTime.add(
+            Duration(minutes: 5),
+          );
+
+          // Si han pasado 5 minutos
+          if (now.isAfter(fiveMinutesAfter)) {
+            if (recordatory.repeat == 'ninguno') {
+              // No se repite, eliminar
+              recordatoriesToRemove.add(recordatory);
+            } else {
+              // Se repite, calcular siguiente fecha
+              DateTime? nextDate = _calculateNextRepeatDate(
+                recordatoryDateTime,
+                recordatory.repeat,
+                recordatory.repeatInterval,
+              );
+
+              if (nextDate != null) {
+                // Verificar si no ha pasado la fecha final
+                if (recordatory.repeatEndDate.isNotEmpty) {
+                  final endDateParts = recordatory.repeatEndDate.split('/');
+                  if (endDateParts.length == 3) {
+                    final endDate = DateTime(
+                      int.parse(endDateParts[2]),
+                      int.parse(endDateParts[1]),
+                      int.parse(endDateParts[0]),
+                    );
+
+                    if (nextDate.isAfter(endDate)) {
+                      recordatoriesToRemove.add(recordatory);
+                      continue;
+                    }
+                  }
+                }
+
+                // Actualizar fecha
+                final updatedRecordatory = Recordatory(
+                  id: recordatory.id,
+                  title: recordatory.title,
+                  date:
+                      "${nextDate.day.toString().padLeft(2, '0')}/${nextDate.month.toString().padLeft(2, '0')}/${nextDate.year}",
+                  time: recordatory.time,
+                  activityId: recordatory.activityId,
+                  userId: recordatory.userId,
+                  creatorId: recordatory.creatorId,
+                  isNotificationEnabled: recordatory.isNotificationEnabled,
+                  repeat: recordatory.repeat,
+                  repeatInterval: recordatory.repeatInterval,
+                  repeatEndDate: recordatory.repeatEndDate,
+                );
+                recordatoriesToUpdate.add(updatedRecordatory);
+              } else {
+                recordatoriesToRemove.add(recordatory);
+              }
+            }
+          }
+        } catch (e) {
+          print('Error procesando recordatorio ${recordatory.id}: $e');
+        }
+      }
+
+      // Eliminar recordatorios expirados
+      for (final recordatory in recordatoriesToRemove) {
+        await _firestore
+            .collection(_collectionName)
+            .doc(recordatory.id.toString())
+            .delete();
+        _recordatories.removeWhere((r) => r.id == recordatory.id);
+        await _notificationService.cancelNotification(recordatory.id);
+      }
+
+      // Actualizar recordatorios repetitivos
+      for (final recordatory in recordatoriesToUpdate) {
+        await _firestore
+            .collection(_collectionName)
+            .doc(recordatory.id.toString())
+            .set(recordatory.toMap());
+        final index = _recordatories.indexWhere((r) => r.id == recordatory.id);
+        if (index != -1) {
+          _recordatories[index] = recordatory;
+          if (recordatory.isNotificationEnabled) {
+            await _notificationService.scheduleNotification(recordatory);
+          }
+        }
+      }
+
+      if (recordatoriesToRemove.isNotEmpty ||
+          recordatoriesToUpdate.isNotEmpty) {
+        notifyListeners();
+        print(
+          'Limpieza completada: ${recordatoriesToRemove.length} eliminados, ${recordatoriesToUpdate.length} actualizados',
+        );
+      }
+    } catch (e) {
+      print('Error en limpieza de recordatorios: $e');
+    }
+  }
+
+  DateTime? _calculateNextRepeatDate(
+    DateTime currentDate,
+    String repeat,
+    int? interval,
+  ) {
+    try {
+      switch (repeat.toLowerCase()) {
+        case 'diario':
+          return currentDate.add(Duration(days: interval ?? 1));
+        case 'semanal':
+          return currentDate.add(Duration(days: (interval ?? 1) * 7));
+        case 'mensual':
+          final nextMonth = DateTime(
+            currentDate.year,
+            currentDate.month + (interval ?? 1),
+            currentDate.day,
+            currentDate.hour,
+            currentDate.minute,
+          );
+          return nextMonth;
+        default:
+          return null;
+      }
+    } catch (e) {
+      print('Error calculando siguiente fecha: $e');
+      return null;
     }
   }
 
