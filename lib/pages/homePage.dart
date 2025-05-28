@@ -3,6 +3,9 @@ import 'package:bymax/pages/activitiesPage.dart';
 import 'package:bymax/pages/recordatoryPage.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:bymax/main.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class homePage extends StatefulWidget {
   const homePage({super.key});
@@ -23,6 +26,7 @@ class _homePageState extends State<homePage> {
     super.initState();
     // Cargar el nombre del usuario cuando se inicia la pantalla
     _loadUserName();
+    _registrarTokenSiEsNecesario();
   }
 
   // Método para cargar el nombre del usuario desde SharedPreferences
@@ -36,6 +40,19 @@ class _homePageState extends State<homePage> {
       });
     } catch (e) {
       print('Error al cargar el nombre del usuario: $e');
+    }
+  }
+
+  void _registrarTokenSiEsNecesario() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      String? token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await registrarTokenFCM(user.uid, token);
+      }
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+        await registrarTokenFCM(user.uid, newToken);
+      });
     }
   }
 

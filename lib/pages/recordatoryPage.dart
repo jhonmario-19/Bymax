@@ -942,9 +942,11 @@ class _RecordatoryPageState extends State<RecordatoryPage> {
                             initialTime: TimeOfDay.now(),
                           );
                           if (picked != null) {
+                            final hour = picked.hourOfPeriod == 0 ? 12 : picked.hourOfPeriod;
+                            final period = picked.period == DayPeriod.am ? 'AM' : 'PM';
                             setState(() {
                               _timeController.text =
-                                  "${picked.hour}:${picked.minute.toString().padLeft(2, '0')}";
+                                  "$hour:${picked.minute.toString().padLeft(2, '0')} $period";
                             });
                           }
                         },

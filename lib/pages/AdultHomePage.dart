@@ -10,6 +10,7 @@ import '../controllers/loginController.dart';
 import '../models/recordatoryModel.dart';
 import '../services/tts_service.dart';
 import '../services/notification_service.dart';
+import 'package:bymax/main.dart';
 
 class AdultHomePages extends StatefulWidget {
   const AdultHomePages({Key? key}) : super(key: key);
@@ -44,12 +45,26 @@ class _AdultHomePageState extends State<AdultHomePages> {
     _initLocalNotifications();
     _configureNotifications();
     _startPeriodicCheck();
-    _checkForMissedNotifications();
+    //_checkForMissedNotifications();
+    _registrarTokenSiEsNecesario();
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       print('📱 App abierta desde notificación: ${message.data}');
       _forceRefreshAndCheck();
     });
+  }
+
+  void _registrarTokenSiEsNecesario() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      String? token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await registrarTokenFCM(user.uid, token);
+      }
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+        await registrarTokenFCM(user.uid, newToken);
+      });
+    }
   }
 
   @override
@@ -424,30 +439,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
     });
   }
 
-  Future<void> _checkForMissedNotifications() async {
-    try {
-      final recordatoryController = Provider.of<RecordatoryController>(
-        context,
-        listen: false,
-      );
-
-      await recordatoryController.checkPendingNotifications();
-
-      if (recordatoryController.recordatories.isNotEmpty) {
-        await recordatoryController.rescheduleAllNotifications();
-      }
-    } catch (e) {
-      print('Error al verificar notificaciones perdidas: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al cargar notificaciones: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
+  
 
   Future<void> _initializeTTS() async {
     await _ttsService.initTTS();
@@ -503,7 +495,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
           await _markPastRecordatoriesAsRead(recordatoryController);
 
           // Verificar notificaciones perdidas
-          await _checkForMissedNotifications();
+          //await _checkForMissedNotifications();
 
           // Programar alarmas solo para recordatorios válidos
           await recordatoryController.scheduleAllAlarmsForUser(user.uid);

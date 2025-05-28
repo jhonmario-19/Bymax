@@ -14,6 +14,7 @@ class TTSService {
   final FlutterTts _flutterTts = FlutterTts();
   bool _isSpeaking = false;
   Timer? _repeatTimer;
+  Timer? _scheduledAlarmTimer; // Timer para alarmas pospuestas
   int _repeatCount = 0;
   final int _maxRepeats = 3; // Número máximo de repeticiones
 
@@ -138,7 +139,7 @@ class TTSService {
 
   // Programar repetición posterior
   void _scheduleRepeatLater(String text, Duration delay) {
-    Timer(delay, () {
+    _scheduledAlarmTimer = Timer(delay, () {
       speakAsAlarm('Recordatorio pospuesto: $text');
     });
   }
@@ -146,18 +147,19 @@ class TTSService {
   // Cancelar repeticiones
   void _cancelRepeating() {
     _repeatTimer?.cancel();
+    _scheduledAlarmTimer?.cancel(); // Cancela el timer de posposición
     _repeatTimer = null;
+    _scheduledAlarmTimer = null; // Limpia la referencia
     _repeatCount = 0;
   }
 
   // Método para detener el habla
   Future<void> stop() async {
     _isAlarmMode = false;
-    _cancelRepeating();
+    _cancelRepeating(); // Esto ahora cancela ambos timers
     await _flutterTts.stop();
     _isSpeaking = false;
 
-    // Detener vibración si está activa
     if (await Vibration.hasVibrator() ?? false) {
       Vibration.cancel();
     }

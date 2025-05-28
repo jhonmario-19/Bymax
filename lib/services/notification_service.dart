@@ -180,8 +180,9 @@ class NotificationService {
       for (final recordatory in recordatoryController.recordatories) {
         if (!recordatory.isRead && recordatory.isNotificationEnabled) {
           // Parsear fecha y hora
+          final timeString = convertTo24HourFormat(recordatory.time);
           final dateTimeParts = recordatory.date.split('/');
-          final timeParts = recordatory.time.split(':');
+          final timeParts = timeString.split(':');
 
           if (dateTimeParts.length == 3 && timeParts.length == 2) {
             final day = int.parse(dateTimeParts[0]);
@@ -286,8 +287,9 @@ class NotificationService {
   Future<void> scheduleRecordatoryAlarm(Recordatory recordatorio) async {
     try {
       // Convertir fecha y hora del recordatorio a DateTime
+      final timeString = convertTo24HourFormat(recordatorio.time);
       final dateTimeParts = recordatorio.date.split('/');
-      final timeParts = recordatorio.time.split(':');
+      final timeParts = timeString.split(':');
 
       if (dateTimeParts.length != 3 || timeParts.length != 2) {
         print('Formato de fecha u hora inválido');
@@ -599,7 +601,8 @@ class NotificationService {
     try {
       // Convertir fecha y hora del recordatorio a DateTime
       final dateTimeParts = recordatorio.date.split('/');
-      final timeParts = recordatorio.time.split(':');
+      final timeString = convertTo24HourFormat(recordatorio.time);
+      final timeParts = timeString.split(':');
 
       if (dateTimeParts.length != 3 || timeParts.length != 2) {
         print('Formato de fecha u hora inválido');
@@ -707,6 +710,24 @@ class NotificationService {
     } catch (e) {
       print('Error al programar notificación: $e');
     }
+  }
+
+  String convertTo24HourFormat(String time12h) {
+    final regExp = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*([AP]M)$',
+      caseSensitive: false,
+    );
+    final match = regExp.firstMatch(time12h.trim());
+    if (match == null) return time12h; // Si ya está en 24h o formato inesperado
+
+    int hour = int.parse(match.group(1)!);
+    final int minute = int.parse(match.group(2)!);
+    final String period = match.group(3)!.toUpperCase();
+
+    if (period == 'PM' && hour != 12) hour += 12;
+    if (period == 'AM' && hour == 12) hour = 0;
+
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
   }
 
   // Programar notificaciones para una lista de recordatorios

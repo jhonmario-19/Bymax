@@ -3,6 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bymax/controllers/loginController.dart';
 // Importamos la página de recordatorios
 import 'package:bymax/pages/recordatoryPage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:bymax/main.dart';
 
 class FamiliarHomePage extends StatefulWidget {
   const FamiliarHomePage({super.key});
@@ -21,6 +24,7 @@ class _FamiliarHomePageState extends State<FamiliarHomePage> {
   void initState() {
     super.initState();
     _loadUserInfo();
+    _registrarTokenSiEsNecesario();
   }
 
   // Método para cargar el nombre del usuario desde SharedPreferences
@@ -36,6 +40,18 @@ class _FamiliarHomePageState extends State<FamiliarHomePage> {
       });
     } catch (e) {
       print('Error al cargar la información del usuario: $e');
+    }
+  }
+  void _registrarTokenSiEsNecesario() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      String? token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await registrarTokenFCM(user.uid, token);
+      }
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+        await registrarTokenFCM(user.uid, newToken);
+      });
     }
   }
 

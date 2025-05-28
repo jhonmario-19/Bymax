@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:bymax/services/authService.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -19,6 +21,7 @@ import 'package:bymax/controllers/recordatoryController.dart';
 import 'package:bymax/controllers/authStateController.dart';
 import 'package:bymax/services/notification_service.dart';
 import 'package:bymax/pages/familiarHomePage.dart';
+import 'package:http/http.dart' as http;
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -88,4 +91,14 @@ class MyApp extends StatelessWidget {
       },
     );
   }
+}
+
+Future<void> registrarTokenFCM(String userId, String fcmToken) async {
+    final url = Uri.parse('https://backend-bymax.onrender.com/register-token'); // Cambia TU_BACKEND por tu IP o ngrok
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'userId': userId, 'fcmToken': fcmToken}),
+    );
+    print('Respuesta backend: ${response.body}');
 }

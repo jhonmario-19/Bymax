@@ -646,7 +646,15 @@ class RecordatoryController extends ChangeNotifier {
       await _firestore
           .collection(_collectionName)
           .doc(recordatory.id.toString())
-          .set(recordatoryWithCreator.toMap());
+          .set({
+            ...recordatoryWithCreator.toMap(),
+            'enviado': false, 
+          });
+      await notificarRecordatorioCreado(
+        recordatory.userId,
+        recordatory.title,
+        recordatory.id,
+      );
 
       // Actualizar lista local
       _recordatories.add(recordatoryWithCreator);
@@ -1043,8 +1051,11 @@ class RecordatoryController extends ChangeNotifier {
       final recordatoriesToUpdate = <Recordatory>[];
 
       for (final recordatory in _recordatories) {
+        final timeString = NotificationService().convertTo24HourFormat(
+          recordatory.time,
+        );
         final dateParts = recordatory.date.split('/');
-        final timeParts = recordatory.time.split(':');
+        final timeParts = timeString.split(':');
 
         if (dateParts.length != 3 || timeParts.length != 2) continue;
 
@@ -1186,5 +1197,25 @@ class RecordatoryController extends ChangeNotifier {
   // Método para refrescar la lista de usuarios explícitamente
   Future<void> refreshUsers() async {
     await _fetchUsers();
+  }
+
+  Future<void> notificarRecordatorioCreado(
+    String userId,
+    String title,
+    int recordatoryId,
+  ) async {
+    final url = Uri.parse(
+      'https://backend-bymax.onrender.com/recordatory-created',
+    );
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'userId': userId,
+        'title': title,
+        'recordatoryId': recordatoryId,
+      }),
+    );
+    print('Respuesta notificación inmediata: ${response.body}');
   }
 }
