@@ -32,6 +32,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
   Map<int, int> _recordatoryRepeatCount = {};
   Map<int, Timer?> _repeatTimers = {};
   bool _manualRefreshExecuted = false;
+  bool _isTtsSpeaking = false;
 
   Set<String> _processedRecordatoriesKeys = {};
 
@@ -47,6 +48,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
     _startPeriodicCheck();
     //_checkForMissedNotifications();
     _registrarTokenSiEsNecesario();
+    _ttsService.isSpeakingNotifier.addListener(_updateTtsState);
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       print('📱 App abierta desde notificación: ${message.data}');
@@ -351,9 +353,16 @@ class _AdultHomePageState extends State<AdultHomePages> {
     });
   }
 
+  void _updateTtsState() {
+    if (mounted) {
+      setState(() {
+        _isTtsSpeaking = _ttsService.isSpeakingNotifier.value;
+      });
+    }
+  }
+
   void _stopAllActiveRecordatories() {
-    if (_recordatoryRepeatCount.isEmpty && _speakingRecordatoryId == null) {
-      // Mostrar mensaje si no hay alarmas activas
+    if (_recordatoryRepeatCount.isEmpty && !_isTtsSpeaking) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('No hay recordatorios activos para detener'),
@@ -363,6 +372,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
       );
       return;
     }
+
 
     print('🛑 Parando todos los recordatorios activos');
     
@@ -468,6 +478,7 @@ class _AdultHomePageState extends State<AdultHomePages> {
 
     _scrollController.dispose();
     _ttsService.dispose();
+    _ttsService.isSpeakingNotifier.removeListener(_updateTtsState);
     super.dispose();
   }
 
@@ -889,7 +900,9 @@ class _AdultHomePageState extends State<AdultHomePages> {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: (_recordatoryRepeatCount.isNotEmpty || _speakingRecordatoryId != null)
+                          color: (_recordatoryRepeatCount.isNotEmpty || 
+                                  _isTtsSpeaking || // USAR EL ESTADO CORRECTO
+                                  _speakingRecordatoryId != null)
                               ? Colors.red.withOpacity(0.8)
                               : Colors.grey.withOpacity(0.3),
                           borderRadius: BorderRadius.circular(8),

@@ -10,6 +10,7 @@ class TTSService {
   static final TTSService _instance = TTSService._internal();
   factory TTSService() => _instance;
   TTSService._internal();
+  final ValueNotifier<bool> isSpeakingNotifier = ValueNotifier(false);
 
   final FlutterTts _flutterTts = FlutterTts();
   bool _isSpeaking = false;
@@ -38,6 +39,7 @@ class TTSService {
     // Escuchar cuando termina de hablar
     _flutterTts.setCompletionHandler(() {
       _isSpeaking = false;
+      isSpeakingNotifier.value = false;
 
       // Si está en modo alarma, repetir automáticamente
       if (_isAlarmMode && _repeatCount < _maxRepeats) {
@@ -63,8 +65,11 @@ class TTSService {
       await _flutterTts.stop();
     }
 
+    // CORRECCIÓN: Establecer estado correcto ANTES de hablar
     _isSpeaking = true;
+    isSpeakingNotifier.value = true;
     _lastSpokenText = text;
+    
     await _flutterTts.speak(text);
   }
 
@@ -73,23 +78,29 @@ class TTSService {
     if (_isSpeaking) {
       await _flutterTts.stop();
       _isSpeaking = false;
+      isSpeakingNotifier.value = false; // ACTUALIZAR NOTIFIER
       _isAlarmMode = false;
       _cancelRepeating();
       return;
     }
 
     _lastSpokenText = text;
+    
+    // CORRECCIÓN: Actualizar estado antes de hablar
     _isSpeaking = true;
+    isSpeakingNotifier.value = true;
+    
     await _flutterTts.speak(text);
   }
 
   // Método específico para reproducir como alarma (con repeticiones)
   Future<void> speakAsAlarm(String text) async {
-    // Detener cualquier reproducción existente
     if (_isSpeaking) {
       await _flutterTts.stop();
+      // CORRECCIÓN: Actualizar estado al detener
+      _isSpeaking = false;
+      isSpeakingNotifier.value = false;
     }
-
     // Cancelar cualquier repetición anterior
     _cancelRepeating();
 
