@@ -352,31 +352,41 @@ class _AdultHomePageState extends State<AdultHomePages> {
   }
 
   void _stopAllActiveRecordatories() {
-    print('🛑 Parando todos los recordatorios activos');
-
-    _ttsService.stop();
-
-    for (final timer in _repeatTimers.values) {
-      timer?.cancel();
-    }
-
-    _repeatTimers.clear();
-    _recordatoryRepeatCount.clear();
-    _manualStopRequested = true;
-
-    setState(() {
-      _speakingRecordatoryId = null;
-    });
-
-    if (mounted) {
+    if (_recordatoryRepeatCount.isEmpty && _speakingRecordatoryId == null) {
+      // Mostrar mensaje si no hay alarmas activas
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Recordatorios detenidos'),
-          backgroundColor: Colors.orange,
+          content: Text('No hay recordatorios activos para detener'),
+          backgroundColor: Colors.blue,
           duration: Duration(seconds: 2),
         ),
       );
+      return;
     }
+
+    print('🛑 Parando todos los recordatorios activos');
+    
+    _ttsService.stop();
+    
+    for (final timer in _repeatTimers.values) {
+      timer?.cancel();
+    }
+    
+    _repeatTimers.clear();
+    _recordatoryRepeatCount.clear();
+    _manualStopRequested = true;
+    
+    setState(() {
+      _speakingRecordatoryId = null;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Recordatorios detenidos'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   void _vibrateDevice() async {
@@ -874,33 +884,33 @@ class _AdultHomePageState extends State<AdultHomePages> {
                       ),
                       const Spacer(),
                       // NUEVO: Botón para parar recordatorios activos
-                      if (_recordatoryRepeatCount.isNotEmpty ||
-                          _speakingRecordatoryId != null)
-                        GestureDetector(
-                          onTap: _stopAllActiveRecordatories,
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.8),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.stop, color: Colors.white, size: 16),
-                                SizedBox(width: 4),
-                                Text(
-                                  'PARAR',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                      GestureDetector(
+                      onTap: _stopAllActiveRecordatories,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: (_recordatoryRepeatCount.isNotEmpty || _speakingRecordatoryId != null)
+                              ? Colors.red.withOpacity(0.8)
+                              : Colors.grey.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(8),
                         ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.stop, color: Colors.white, size: 16),
+                            SizedBox(width: 4),
+                            Text(
+                              'PARAR',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     ],
                   ),
 

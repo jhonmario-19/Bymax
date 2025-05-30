@@ -385,27 +385,57 @@ class _homePageState extends State<homePage> {
               Navigator.pushReplacementNamed(context, '/settings');
               break;
             case 3:
-              try {
-                await LoginController.signOut();
-                if (!mounted) return;
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Sesión cerrada correctamente'),
-                    backgroundColor: Colors.green,
+            // Mostrar diálogo de confirmación
+              final shouldExit = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('¿Estás seguro?'),
+                  content: const Text('¿Deseas cerrar sesión y salir de la aplicación?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text(
+                        'Cancelar',
+                        style: TextStyle(color: Color(0xFF03d069)),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text(
+                        'Salir',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
                   ),
-                );
+                ),
+              );
 
-                Navigator.pushReplacementNamed(context, '/loginPage');
-              } catch (e) {
-                if (!mounted) return;
+              // Si el usuario confirma, cerrar sesión y regresar al login
+              if (shouldExit == true) {
+                try {
+                  await LoginController.signOut();
+                  if (!mounted) return;
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error al cerrar sesión: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Sesión cerrada correctamente'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+
+                  Navigator.pushReplacementNamed(context, '/loginPage');
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error al cerrar sesión: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
               break;
           }

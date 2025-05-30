@@ -848,7 +848,7 @@ class _AddUserPageState extends State<AddUserPage> {
       child: GestureDetector(
         onTap: onTap, // Ahora podemos manejar la selección
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color:
                 isSelected
